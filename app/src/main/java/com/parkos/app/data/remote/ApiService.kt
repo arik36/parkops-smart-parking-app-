@@ -4,8 +4,12 @@ import com.parkos.app.data.remote.dto.CreateUserProfileRequest
 import com.parkos.app.data.remote.dto.LoginRequest
 import com.parkos.app.data.remote.dto.LoginResponse
 import com.parkos.app.data.remote.dto.OrganizationDto
+import com.parkos.app.data.remote.dto.ParkingLotDto
+import com.parkos.app.data.remote.dto.ParkingSpotDto
 import com.parkos.app.data.remote.dto.RegisterRequest
 import com.parkos.app.data.remote.dto.RegisterResponse
+import com.parkos.app.data.remote.dto.ReservationDto
+import com.parkos.app.data.remote.dto.ReserveSpotRequest
 import com.parkos.app.data.remote.dto.UserProfileDto
 import retrofit2.Response
 import retrofit2.http.Body
@@ -45,4 +49,29 @@ interface ApiService {
     suspend fun getOrganizations(
         @Query("select") select: String = "id"
     ): Response<List<OrganizationDto>>
+
+    @GET("rest/v1/parking_lots")
+    suspend fun getParkingLots(
+        @Query("select") select: String = "id,org_id,name,address,latitude,longitude,created_at",
+        @Query("order") order: String = "name.asc"
+    ): Response<List<ParkingLotDto>>
+
+    @GET("rest/v1/parking_lots")
+    suspend fun getParkingLotsByOrg(
+        @Query("org_id") orgFilter: String,
+        @Query("select") select: String = "id,org_id,name,address,latitude,longitude,created_at",
+        @Query("order") order: String = "name.asc"
+    ): Response<List<ParkingLotDto>>
+
+    @GET("rest/v1/parking_spots")
+    suspend fun getParkingSpots(
+        @Query("parking_lot_id") parkingLotFilter: String,
+        @Query("select") select: String = "id,parking_lot_id,spot_number,status,type,updated_at",
+        @Query("order") order: String = "spot_number.asc"
+    ): Response<List<ParkingSpotDto>>
+
+    @POST("rest/v1/rpc/reserve_spot")
+    suspend fun reserveSpot(
+        @Body request: ReserveSpotRequest
+    ): Response<ReservationDto>
 }

@@ -5,11 +5,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.parkos.app.ui.admin.AdminScreen
 import com.parkos.app.ui.auth.AuthViewModel
 import com.parkos.app.ui.auth.LoginScreen
 import com.parkos.app.ui.auth.RegisterScreen
-import com.parkos.app.ui.common.TextScreen
+import com.parkos.app.ui.map.MapScreen
+import com.parkos.app.ui.map.ParkingViewModel
 import com.parkos.app.ui.splash.SplashScreen
 import com.parkos.app.ui.splash.SplashViewModel
 
@@ -28,15 +28,8 @@ fun NavGraph() {
 
             SplashScreen(
                 viewModel = viewModel,
-                onLogged = { role ->
-                    val destination = when (role) {
-                        "admin" -> "admin"
-                        "collaborator" -> "map"
-                        "consumer" -> "map"
-                        else -> "login"
-                    }
-
-                    navController.navigate(destination) {
+                onLogged = {
+                    navController.navigate("map") {
                         popUpTo("splash") { inclusive = true }
                     }
                 },
@@ -53,15 +46,8 @@ fun NavGraph() {
 
             LoginScreen(
                 viewModel = viewModel,
-                onLoginSuccess = { role ->
-                    val destination = when (role) {
-                        "admin" -> "admin"
-                        "collaborator" -> "map"
-                        "consumer" -> "map"
-                        else -> "login"
-                    }
-
-                    navController.navigate(destination) {
+                onLoginSuccess = {
+                    navController.navigate("map") {
                         popUpTo("login") { inclusive = true }
                     }
                 },
@@ -76,15 +62,8 @@ fun NavGraph() {
 
             RegisterScreen(
                 authViewModel = viewModel,
-                onRegisterSuccess = { role ->
-                    val destination = when (role) {
-                        "admin" -> "admin"
-                        "collaborator" -> "map"
-                        "consumer" -> "map"
-                        else -> "login"
-                    }
-
-                    navController.navigate(destination) {
+                onRegisterSuccess = {
+                    navController.navigate("map") {
                         popUpTo("register") { inclusive = true }
                     }
                 },
@@ -96,22 +75,20 @@ fun NavGraph() {
             )
         }
 
-        composable("admin") {
-            val viewModel: AuthViewModel = hiltViewModel()
+        composable("map") {
+            val authViewModel: AuthViewModel = hiltViewModel()
+            val parkingViewModel: ParkingViewModel = hiltViewModel()
 
-            AdminScreen(
+            MapScreen(
+                viewModel = parkingViewModel,
                 onLogout = {
-                    viewModel.logout()
+                    authViewModel.logout()
 
                     navController.navigate("login") {
                         popUpTo(0)
                     }
                 }
             )
-        }
-
-        composable("map") {
-            TextScreen("Pantalla MAPA")
         }
     }
 }

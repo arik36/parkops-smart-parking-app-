@@ -21,8 +21,22 @@ class AuthRepositoryImpl @Inject constructor(
 
     override suspend fun login(email: String, password: String): Result<User> {
         return try {
+            val cleanEmail = email.trim()
+            val cleanPassword = password.trim()
+
+            if (cleanEmail.isBlank()) {
+                return Result.failure(Exception("El email es obligatorio"))
+            }
+
+            if (cleanPassword.isBlank()) {
+                return Result.failure(Exception("La contraseña es obligatoria"))
+            }
+
             val loginResponse = apiService.login(
-                LoginRequest(email, password)
+                LoginRequest(
+                    email = cleanEmail,
+                    password = cleanPassword
+                )
             )
 
             if (!loginResponse.isSuccessful) {
@@ -87,6 +101,7 @@ class AuthRepositoryImpl @Inject constructor(
         return try {
             val cleanName = fullName.trim()
             val cleanEmail = email.trim()
+            val cleanPassword = password.trim()
             val cleanOrgId = orgId?.trim()?.takeIf { it.isNotBlank() }
 
             if (cleanName.isBlank()) {
@@ -97,7 +112,7 @@ class AuthRepositoryImpl @Inject constructor(
                 return Result.failure(Exception("El email es obligatorio"))
             }
 
-            if (password.length < 6) {
+            if (cleanPassword.length < 6) {
                 return Result.failure(Exception("La contraseña debe tener al menos 6 caracteres"))
             }
 
@@ -122,7 +137,7 @@ class AuthRepositoryImpl @Inject constructor(
             val registerResponse = apiService.register(
                 RegisterRequest(
                     email = cleanEmail,
-                    password = password
+                    password = cleanPassword
                 )
             )
 
@@ -150,7 +165,7 @@ class AuthRepositoryImpl @Inject constructor(
                 val loginAfterRegisterResponse = apiService.login(
                     LoginRequest(
                         email = cleanEmail,
-                        password = password
+                        password = cleanPassword
                     )
                 )
 
@@ -222,6 +237,7 @@ class AuthRepositoryImpl @Inject constructor(
             Result.failure(e)
         }
     }
+
     override suspend fun getOrganizationIds(): Result<List<String>> {
         return try {
             val response = apiService.getOrganizations()
