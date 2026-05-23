@@ -70,8 +70,31 @@ interface ApiService {
         @Query("order") order: String = "spot_number.asc"
     ): Response<List<ParkingSpotDto>>
 
+    @POST("rest/v1/rpc/expire_old_reservations")
+    suspend fun expireOldReservations(
+        @Body request: Map<String, String> = emptyMap()
+    ): Response<Unit>
+
     @POST("rest/v1/rpc/reserve_spot")
     suspend fun reserveSpot(
         @Body request: ReserveSpotRequest
+    ): Response<ReservationDto>
+
+    @POST("rest/v1/rpc/occupy_reserved_spot")
+    suspend fun occupyReservedSpot(
+        @Body request: ReserveSpotRequest
+    ): Response<ReservationDto>
+
+    @GET("rest/v1/reservations")
+    suspend fun getActiveReservations(
+        @Query("status") statusFilter: String = "in.(reserved,active)",
+        @Query("select") select: String = "id,user_id,spot_id,status,start_time,end_time,created_at,expires_at,occupied_at",
+        @Query("order") order: String = "start_time.desc",
+        @Query("limit") limit: Int = 1
+    ): Response<List<ReservationDto>>
+
+    @POST("rest/v1/rpc/release_active_reservation")
+    suspend fun releaseActiveReservation(
+        @Body request: Map<String, String> = emptyMap()
     ): Response<ReservationDto>
 }

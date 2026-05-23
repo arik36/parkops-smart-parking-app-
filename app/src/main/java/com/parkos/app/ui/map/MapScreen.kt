@@ -42,6 +42,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -53,7 +54,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.parkos.app.domain.model.ParkingLot
 import com.parkos.app.domain.model.ParkingSpot
+import com.parkos.app.domain.model.Reservation
 import com.parkos.app.ui.theme.ParkosOrange
+import kotlinx.coroutines.delay
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 private data class BottomTab(
     val label: String,
@@ -69,14 +74,21 @@ fun MapScreen(
     val parkingLots by viewModel.parkingLots.collectAsState()
     val selectedParkingLot by viewModel.selectedParkingLot.collectAsState()
     val spots by viewModel.spots.collectAsState()
+    val activeReservation by viewModel.activeReservation.collectAsState()
+    val activeReservationSpotNumber by viewModel.activeReservationSpotNumber.collectAsState()
+    val activeReservationParkingLotName by viewModel.activeReservationParkingLotName.collectAsState()
     val isLoadingLots by viewModel.isLoadingLots.collectAsState()
     val isLoadingSpots by viewModel.isLoadingSpots.collectAsState()
     val isReserving by viewModel.isReserving.collectAsState()
+    val isOccupying by viewModel.isOccupying.collectAsState()
+    val isReleasing by viewModel.isReleasing.collectAsState()
     val reservationMessage by viewModel.reservationMessage.collectAsState()
     val error by viewModel.error.collectAsState()
 
     var selectedTab by remember { mutableIntStateOf(0) }
     var spotToReserve by remember { mutableStateOf<ParkingSpot?>(null) }
+    var showOccupyDialog by remember { mutableStateOf(false) }
+    var showReleaseDialog by remember { mutableStateOf(false) }
 
     val tabs = listOf(
         BottomTab("Perfil", Icons.Default.Person),
@@ -100,7 +112,7 @@ fun MapScreen(
                 Text("Reservar cajón")
             },
             text = {
-                Text("¿Quieres reservar el cajón ${spot.spotNumber}?")
+                Text("¿Quieres reservar el cajón ${spot.spotNumber} por 5 minutos?")
             },
             confirmButton = {
                 Button(
@@ -118,6 +130,82 @@ fun MapScreen(
                     enabled = !isReserving,
                     onClick = {
                         spotToReserve = null
+                    }
+                ) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    if (showOccupyDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!isOccupying) {
+                    showOccupyDialog = false
+                }
+            },
+            title = {
+                Text("Ya llegué")
+            },
+            text = {
+                Text("¿Confirmas que ya estás en el cajón reservado?")
+            },
+            confirmButton = {
+                Button(
+                    enabled = !isOccupying && activeReservation != null,
+                    onClick = {
+                        activeReservation?.let { reservation ->
+                            viewModel.occupyReservedSpot(reservation.spotId)
+                        }
+                        showOccupyDialog = false
+                    }
+                ) {
+                    Text(if (isOccupying) "Confirmando..." else "Confirmar")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !isOccupying,
+                    onClick = {
+                        showOccupyDialog = false
+                    }
+                ) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    if (showReleaseDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!isReleasing) {
+                    showReleaseDialog = false
+                }
+            },
+            title = {
+                Text("Estoy saliendo")
+            },
+            text = {
+                Text("¿Quieres liberar tu cajón y terminar tu uso del estacionamiento?")
+            },
+            confirmButton = {
+                Button(
+                    enabled = !isReleasing,
+                    onClick = {
+                        viewModel.releaseActiveReservation()
+                        showReleaseDialog = false
+                    }
+                ) {
+                    Text(if (isReleasing) "Liberando..." else "Liberar")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !isReleasing,
+                    onClick = {
+                        showReleaseDialog = false
                     }
                 ) {
                     Text("Cancelar")
@@ -161,6 +249,16 @@ fun MapScreen(
                 0 -> ProfileTab(
                     role = userRole,
                     selectedParkingLot = selectedParkingLot,
+                    activeReservation = activeReservation,
+                    activeReservationSpotNumber = activeReservationSpotNumber,
+                    activeReservationParkingLotName = activeReservationParkingLotName,
+                    isOccupying = isOccupying,
+                    isReleasing = isReleasing,
+                    onOccupyClick = { showOccupyDialog = true },
+                    onReleaseClick = { showReleaseDialog = true },
+                    onReservationExpired = {
+                        viewModel.refreshAfterReservationExpiration()
+                    },
                     onLogout = onLogout
                 )
 
@@ -177,16 +275,31 @@ fun MapScreen(
                 )
 
                 2 -> MapTab(
+                    role = userRole,
                     selectedParkingLot = selectedParkingLot,
                     spots = spots,
+                    activeReservation = activeReservation,
+                    activeReservationSpotNumber = activeReservationSpotNumber,
+                    activeReservationParkingLotName = activeReservationParkingLotName,
                     isLoading = isLoadingSpots,
                     isReserving = isReserving,
+                    isOccupying = isOccupying,
+                    isReleasing = isReleasing,
                     reservationMessage = reservationMessage,
                     error = error,
                     onRetry = { viewModel.loadSelectedParkingLotSpots() },
                     onGoToParkingLots = { selectedTab = 1 },
                     onReserveSpotClick = { spot ->
                         spotToReserve = spot
+                    },
+                    onOccupyClick = {
+                        showOccupyDialog = true
+                    },
+                    onReleaseClick = {
+                        showReleaseDialog = true
+                    },
+                    onReservationExpired = {
+                        viewModel.refreshAfterReservationExpiration()
                     },
                     onClearReservationMessage = {
                         viewModel.clearReservationMessage()
@@ -203,6 +316,14 @@ fun MapScreen(
 private fun ProfileTab(
     role: String?,
     selectedParkingLot: ParkingLot?,
+    activeReservation: Reservation?,
+    activeReservationSpotNumber: String?,
+    activeReservationParkingLotName: String?,
+    isOccupying: Boolean,
+    isReleasing: Boolean,
+    onOccupyClick: () -> Unit,
+    onReleaseClick: () -> Unit,
+    onReservationExpired: () -> Unit,
     onLogout: () -> Unit
 ) {
     Text(
@@ -253,6 +374,19 @@ private fun ProfileTab(
         }
     }
 
+    Spacer(modifier = Modifier.height(16.dp))
+
+    ActiveReservationCard(
+        activeReservation = activeReservation,
+        activeReservationSpotNumber = activeReservationSpotNumber,
+        activeReservationParkingLotName = activeReservationParkingLotName,
+        isOccupying = isOccupying,
+        isReleasing = isReleasing,
+        onOccupyClick = onOccupyClick,
+        onReleaseClick = onReleaseClick,
+        onReservationExpired = onReservationExpired
+    )
+
     Spacer(modifier = Modifier.height(24.dp))
 
     OutlinedButton(
@@ -286,7 +420,7 @@ private fun HomeTab(
 
     Text(
         text = when (role) {
-            "admin" -> "Selecciona uno para revisar o editar después."
+            "admin" -> "Puedes revisar los estacionamientos, pero no reservar cajones."
             "collaborator" -> "Selecciona el estacionamiento donde estás trabajando."
             else -> "Selecciona a qué estacionamiento quieres entrar."
         },
@@ -411,15 +545,24 @@ private fun ParkingLotCard(
 
 @Composable
 private fun MapTab(
+    role: String?,
     selectedParkingLot: ParkingLot?,
     spots: List<ParkingSpot>,
+    activeReservation: Reservation?,
+    activeReservationSpotNumber: String?,
+    activeReservationParkingLotName: String?,
     isLoading: Boolean,
     isReserving: Boolean,
+    isOccupying: Boolean,
+    isReleasing: Boolean,
     reservationMessage: String?,
     error: String?,
     onRetry: () -> Unit,
     onGoToParkingLots: () -> Unit,
     onReserveSpotClick: (ParkingSpot) -> Unit,
+    onOccupyClick: () -> Unit,
+    onReleaseClick: () -> Unit,
+    onReservationExpired: () -> Unit,
     onClearReservationMessage: () -> Unit
 ) {
     Text(
@@ -451,6 +594,19 @@ private fun MapTab(
 
         return
     }
+
+    ActiveReservationCard(
+        activeReservation = activeReservation,
+        activeReservationSpotNumber = activeReservationSpotNumber,
+        activeReservationParkingLotName = activeReservationParkingLotName,
+        isOccupying = isOccupying,
+        isReleasing = isReleasing,
+        onOccupyClick = onOccupyClick,
+        onReleaseClick = onReleaseClick,
+        onReservationExpired = onReservationExpired
+    )
+
+    Spacer(modifier = Modifier.height(12.dp))
 
     ParkingLegend()
 
@@ -487,7 +643,7 @@ private fun MapTab(
         Spacer(modifier = Modifier.height(12.dp))
     }
 
-    if (isReserving) {
+    if (isReserving || isOccupying) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -501,8 +657,34 @@ private fun MapTab(
 
             Spacer(modifier = Modifier.size(10.dp))
 
-            Text("Reservando cajón...")
+            Text(
+                text = if (isOccupying) {
+                    "Confirmando llegada..."
+                } else {
+                    "Reservando cajón..."
+                }
+            )
         }
+    }
+
+    if (activeReservation == null && role != "admin") {
+        Text(
+            text = "Toca un cajón disponible para reservarlo.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.DarkGray
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+    }
+
+    if (role == "admin") {
+        Text(
+            text = "Modo administrador: vista de cajones sin reservación.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.DarkGray
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
     }
 
     when {
@@ -544,13 +726,123 @@ private fun MapTab(
             ) {
                 items(spots) { spot ->
                     ParkingSpotCard(
+                        role = role,
                         spot = spot,
+                        activeReservation = activeReservation,
                         onClick = {
-                            if (spot.status.equals("available", ignoreCase = true)) {
+                            if (canReserveSpot(role, spot, activeReservation)) {
                                 onReserveSpotClick(spot)
                             }
                         }
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActiveReservationCard(
+    activeReservation: Reservation?,
+    activeReservationSpotNumber: String?,
+    activeReservationParkingLotName: String?,
+    isOccupying: Boolean,
+    isReleasing: Boolean,
+    onOccupyClick: () -> Unit,
+    onReleaseClick: () -> Unit,
+    onReservationExpired: () -> Unit
+) {
+    if (activeReservation == null) {
+        return
+    }
+
+    val spotLabel = activeReservationSpotNumber ?: "Cajón desconocido"
+    val parkingLotLabel = activeReservationParkingLotName ?: "Estacionamiento no identificado"
+    val isReserved = activeReservation.status.equals("reserved", ignoreCase = true)
+    val isActive = activeReservation.status.equals("active", ignoreCase = true)
+
+    var remainingSeconds by remember(activeReservation.id, activeReservation.expiresAt) {
+        mutableLongStateOf(calculateRemainingSeconds(activeReservation.expiresAt))
+    }
+
+    LaunchedEffect(activeReservation.id, activeReservation.status, activeReservation.expiresAt) {
+        if (isReserved) {
+            while (true) {
+                val seconds = calculateRemainingSeconds(activeReservation.expiresAt)
+                remainingSeconds = seconds
+
+                if (seconds <= 0L) {
+                    onReservationExpired()
+                    break
+                }
+
+                delay(1000)
+            }
+        }
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isReserved) {
+                Color(0xFFFFF3D6)
+            } else {
+                Color(0xFFE6F4EA)
+            }
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp)
+        ) {
+            Text(
+                text = if (isReserved) {
+                    "Reservación pendiente"
+                } else {
+                    "Cajón ocupado"
+                },
+                fontWeight = FontWeight.Bold,
+                color = if (isReserved) Color(0xFF6D4C00) else Color(0xFF1B5E20)
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = "$spotLabel | $parkingLotLabel",
+                color = if (isReserved) Color(0xFF6D4C00) else Color(0xFF1B5E20),
+                style = MaterialTheme.typography.bodyMedium
+            )
+
+            if (isReserved) {
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Text(
+                    text = "Tiempo restante: ${formatRemainingTime(remainingSeconds)}",
+                    color = Color(0xFF6D4C00),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Button(
+                    onClick = onOccupyClick,
+                    enabled = !isOccupying && remainingSeconds > 0L,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (isOccupying) "Confirmando..." else "Ya llegué")
+                }
+            }
+
+            if (isActive) {
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Button(
+                    onClick = onReleaseClick,
+                    enabled = !isReleasing,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (isReleasing) "Liberando..." else "Estoy saliendo")
                 }
             }
         }
@@ -594,29 +886,32 @@ private fun NotificationsTab() {
 
 @Composable
 private fun ParkingSpotCard(
+    role: String?,
     spot: ParkingSpot,
+    activeReservation: Reservation?,
     onClick: () -> Unit
 ) {
     val backgroundColor = getSpotBackgroundColor(spot)
     val borderColor = getSpotBorderColor(spot)
     val textColor = getSpotTextColor(spot)
-    val canReserve = spot.status.equals("available", ignoreCase = true)
+
+    val isActiveUserSpot = activeReservation?.spotId == spot.id
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .height(110.dp)
+            .height(124.dp)
             .background(
                 color = backgroundColor,
                 shape = RoundedCornerShape(18.dp)
             )
             .border(
-                width = 1.dp,
-                color = borderColor,
+                width = if (isActiveUserSpot) 3.dp else 1.dp,
+                color = if (isActiveUserSpot) ParkosOrange else borderColor,
                 shape = RoundedCornerShape(18.dp)
             )
             .clickable(
-                enabled = canReserve,
+                enabled = canReserveSpot(role, spot, activeReservation),
                 onClick = onClick
             )
             .padding(12.dp),
@@ -643,16 +938,6 @@ private fun ParkingSpotCard(
             color = textColor,
             style = MaterialTheme.typography.bodySmall
         )
-
-        if (canReserve) {
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Text(
-                text = "Tocar para reservar",
-                color = textColor,
-                style = MaterialTheme.typography.labelSmall
-            )
-        }
     }
 }
 
@@ -682,7 +967,7 @@ private fun ParkingLegend() {
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        LegendItem("Discapacitado", Color(0xFFE3F2FD))
+        LegendItem("Staff", Color(0xFFEDE7F6))
     }
 }
 
@@ -725,8 +1010,29 @@ private fun CenteredMessage(
     }
 }
 
+private fun canReserveSpot(
+    role: String?,
+    spot: ParkingSpot,
+    activeReservation: Reservation?
+): Boolean {
+    if (activeReservation != null) return false
+    if (role == "admin") return false
+    if (!spot.status.equals("available", ignoreCase = true)) return false
+
+    if (role == "consumer" && spot.type.equals("staff", ignoreCase = true)) {
+        return false
+    }
+
+    if (role == "collaborator" && !spot.type.equals("staff", ignoreCase = true)) {
+        return false
+    }
+
+    return true
+}
+
 private fun getSpotBackgroundColor(spot: ParkingSpot): Color {
     return when {
+        spot.type.lowercase() == "staff" -> Color(0xFFEDE7F6)
         spot.type.lowercase() == "disabled" -> Color(0xFFE3F2FD)
         spot.status.lowercase() == "available" -> Color(0xFFE6F4EA)
         spot.status.lowercase() == "occupied" -> Color(0xFFFFE5E5)
@@ -737,6 +1043,7 @@ private fun getSpotBackgroundColor(spot: ParkingSpot): Color {
 
 private fun getSpotBorderColor(spot: ParkingSpot): Color {
     return when {
+        spot.type.lowercase() == "staff" -> Color(0xFF6A1B9A)
         spot.type.lowercase() == "disabled" -> Color(0xFF1976D2)
         spot.status.lowercase() == "available" -> Color(0xFF2E7D32)
         spot.status.lowercase() == "occupied" -> Color(0xFFC62828)
@@ -747,10 +1054,78 @@ private fun getSpotBorderColor(spot: ParkingSpot): Color {
 
 private fun getSpotTextColor(spot: ParkingSpot): Color {
     return when {
+        spot.type.lowercase() == "staff" -> Color(0xFF4A148C)
         spot.type.lowercase() == "disabled" -> Color(0xFF0D47A1)
         spot.status.lowercase() == "available" -> Color(0xFF1B5E20)
         spot.status.lowercase() == "occupied" -> Color(0xFF8E0000)
         spot.status.lowercase() == "reserved" -> Color(0xFF6D4C00)
         else -> Color.Black
     }
+}
+
+private fun calculateRemainingSeconds(expiresAt: String?): Long {
+    if (expiresAt.isNullOrBlank()) return 0L
+
+    return try {
+        val normalizedDate = normalizeSupabaseTimestamp(expiresAt)
+
+        val formatter = SimpleDateFormat(
+            "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
+            Locale.US
+        )
+
+        val expiresDate = formatter.parse(normalizedDate) ?: return 0L
+        val nowMillis = System.currentTimeMillis()
+        val diffMillis = expiresDate.time - nowMillis
+        val seconds = diffMillis / 1000L
+
+        if (seconds < 0L) 0L else seconds
+    } catch (e: Exception) {
+        0L
+    }
+}
+
+private fun normalizeSupabaseTimestamp(value: String): String {
+    var normalized = value.trim().replace(" ", "T")
+
+    if (normalized.endsWith("+00")) {
+        normalized = normalized.removeSuffix("+00") + "+00:00"
+    }
+
+    if (normalized.endsWith("-00")) {
+        normalized = normalized.removeSuffix("-00") + "-00:00"
+    }
+
+    val timezoneRegex = Regex("([+-]\\d{2})(\\d{2})$")
+    normalized = normalized.replace(timezoneRegex) {
+        "${it.groupValues[1]}:${it.groupValues[2]}"
+    }
+
+    val fractionRegex = Regex("\\.(\\d{1,9})(Z|[+-]\\d{2}:\\d{2})$")
+    normalized = normalized.replace(fractionRegex) {
+        val milliseconds = it.groupValues[1]
+            .padEnd(3, '0')
+            .take(3)
+
+        ".$milliseconds${it.groupValues[2]}"
+    }
+
+    val noFractionRegex = Regex("(\\d{2}:\\d{2}:\\d{2})(Z|[+-]\\d{2}:\\d{2})$")
+    normalized = normalized.replace(noFractionRegex) {
+        "${it.groupValues[1]}.000${it.groupValues[2]}"
+    }
+
+    if (normalized.endsWith("Z")) {
+        normalized = normalized.removeSuffix("Z") + "+00:00"
+    }
+
+    return normalized
+}
+
+private fun formatRemainingTime(seconds: Long): String {
+    val safeSeconds = if (seconds < 0L) 0L else seconds
+    val minutesPart = safeSeconds / 60
+    val secondsPart = safeSeconds % 60
+
+    return "%02d:%02d".format(minutesPart, secondsPart)
 }

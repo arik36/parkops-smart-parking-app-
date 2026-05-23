@@ -3,9 +3,11 @@ package com.parkos.app.data.repository
 import com.parkos.app.data.remote.ApiService
 import com.parkos.app.data.remote.dto.ParkingLotDto
 import com.parkos.app.data.remote.dto.ParkingSpotDto
+import com.parkos.app.data.remote.dto.ReservationDto
 import com.parkos.app.data.remote.dto.ReserveSpotRequest
 import com.parkos.app.domain.model.ParkingLot
 import com.parkos.app.domain.model.ParkingSpot
+import com.parkos.app.domain.model.Reservation
 import com.parkos.app.domain.repository.ParkingRepository
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -20,11 +22,11 @@ class ParkingRepositoryImpl @Inject constructor(
         orgId: String?
     ): Result<List<ParkingLot>> {
         return try {
+            expireOldReservations()
+
             val response = if (role == "admin" || role == "collaborator") {
                 if (orgId.isNullOrBlank()) {
-                    return Result.failure(
-                        Exception("Este usuario no tiene organización asignada.")
-                    )
+                    return Result.failure(Exception("Este usuario no tiene organización asignada."))
                 }
 
                 apiService.getParkingLotsByOrg(
@@ -72,6 +74,8 @@ class ParkingRepositoryImpl @Inject constructor(
         parkingLotId: String
     ): Result<List<ParkingSpot>> {
         return try {
+            expireOldReservations()
+
             val response = apiService.getParkingSpots(
                 parkingLotFilter = "eq.$parkingLotId"
             )
@@ -87,6 +91,29 @@ class ParkingRepositoryImpl @Inject constructor(
                 ?: emptyList()
 
             Result.success(spots)
+
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun getActiveReservation(): Result<Reservation?> {
+        return try {
+            expireOldReservations()
+
+            val response = apiService.getActiveReservations()
+
+            if (!response.isSuccessful) {
+                return Result.failure(
+                    Exception("No se pudo cargar la reservación activa: ${response.errorBody()?.string()}")
+                )
+            }
+
+            val reservation = response.body()
+                ?.firstOrNull()
+                ?.toDomain()
+
+            Result.success(reservation)
 
         } catch (e: Exception) {
             Result.failure(e)
@@ -111,6 +138,55 @@ class ParkingRepositoryImpl @Inject constructor(
 
             Result.success(Unit)
 
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun occupyReservedSpot(
+        spotId: String
+    ): Result<Unit> {
+        return try {
+            val response = apiService.occupyReservedSpot(
+                ReserveSpotRequest(
+                    spotId = spotId
+                )
+            )
+
+            if (!response.isSuccessful) {
+                return Result.failure(
+                    Exception("No se pudo ocupar el cajón: ${response.errorBody()?.string()}")
+                )
+            }
+
+            Result.success(Unit)
+
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun releaseActiveReservation(): Result<Unit> {
+        return try {
+            val response = apiService.releaseActiveReservation()
+
+            if (!response.isSuccessful) {
+                return Result.failure(
+                    Exception("No se pudo liberar el cajón: ${response.errorBody()?.string()}")
+                )
+            }
+
+            Result.success(Unit)
+
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun expireOldReservations(): Result<Unit> {
+        return try {
+            apiService.expireOldReservations()
+            Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -141,6 +217,20 @@ class ParkingRepositoryImpl @Inject constructor(
             status = status,
             type = type,
             updatedAt = updatedAt
+        )
+    }
+
+    private fun ReservationDto.toDomain(): Reservation {
+        return Reservation(
+            id = id,
+            userId = userId,
+            spotId = spotId,
+            status = status,
+            startTime = startTime,
+            endTime = endTime,
+            createdAt = createdAt,
+            expiresAt = expiresAt,
+            occupiedAt = occupiedAt
         )
     }
 }

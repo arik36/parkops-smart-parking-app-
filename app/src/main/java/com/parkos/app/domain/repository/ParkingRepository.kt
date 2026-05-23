@@ -2,6 +2,7 @@ package com.parkos.app.domain.repository
 
 import com.parkos.app.domain.model.ParkingLot
 import com.parkos.app.domain.model.ParkingSpot
+import com.parkos.app.domain.model.Reservation
 
 interface ParkingRepository {
 
@@ -14,7 +15,17 @@ interface ParkingRepository {
         parkingLotId: String
     ): Result<List<ParkingSpot>>
 
+    suspend fun getActiveReservation(): Result<Reservation?>
+
     suspend fun reserveSpot(
         spotId: String
     ): Result<Unit>
+
+    suspend fun occupyReservedSpot(
+        spotId: String
+    ): Result<Unit>
+
+    suspend fun releaseActiveReservation(): Result<Unit>
+
+    suspend fun expireOldReservations(): Result<Unit>
 }

@@ -1,4 +1,5 @@
 package com.parkos.app.data.remote.dto
+
 import com.google.gson.annotations.SerializedName
 
 data class ReservationDto(
@@ -19,5 +20,11 @@ data class ReservationDto(
     val endTime: String?,
 
     @SerializedName("created_at")
-    val createdAt: String?
+    val createdAt: String?,
+
+    @SerializedName("expires_at")
+    val expiresAt: String?,
+
+    @SerializedName("occupied_at")
+    val occupiedAt: String?
 )
