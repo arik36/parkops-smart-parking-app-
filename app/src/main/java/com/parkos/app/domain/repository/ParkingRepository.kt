@@ -3,6 +3,7 @@ package com.parkos.app.domain.repository
 import com.parkos.app.domain.model.ParkingLot
 import com.parkos.app.domain.model.ParkingSpot
 import com.parkos.app.domain.model.Reservation
+import com.parkos.app.domain.model.ParkingFloor
 
 interface ParkingRepository {
 
@@ -30,6 +31,21 @@ interface ParkingRepository {
     suspend fun occupyReservedSpot(
         spotId: String
     ): Result<Unit>
+
+    suspend fun getParkingFloors(
+        parkingLotId: String
+    ): Result<List<ParkingFloor>>
+
+    suspend fun adminCreateParkingSpot(
+        parkingLotId: String,
+        floorId: String,
+        spotNumber: String,
+        type: String,
+        rowIndex: Int,
+        colIndex: Int,
+        widthM: Double?,
+        heightM: Double?
+    ): Result<ParkingSpot>
 
     suspend fun releaseActiveReservation(): Result<Unit>
 

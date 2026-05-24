@@ -10,6 +10,8 @@ import com.parkos.app.domain.model.ParkingSpot
 import com.parkos.app.domain.model.Reservation
 import com.parkos.app.domain.repository.ParkingRepository
 import com.parkos.app.data.remote.dto.AdminUpdateParkingSpotRequest
+import com.parkos.app.data.remote.dto.AdminCreateParkingSpotRequest
+import com.parkos.app.domain.model.ParkingFloor
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -262,6 +264,70 @@ class ParkingRepositoryImpl @Inject constructor(
             expiresAt = expiresAt,
             occupiedAt = occupiedAt
         )
+    }
+    override suspend fun getParkingFloors(
+        parkingLotId: String
+    ): Result<List<ParkingFloor>> {
+        return try {
+            val response = apiService.getParkingFloors(
+                parkingLotIdFilter = "eq.$parkingLotId"
+            )
+
+            if (!response.isSuccessful) {
+                return Result.failure(
+                    Exception("No se pudieron cargar los pisos: ${response.errorBody()?.string()}")
+                )
+            }
+
+            val floors = response.body()
+                ?.map { it.toDomain() }
+                ?: emptyList()
+
+            Result.success(floors)
+
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun adminCreateParkingSpot(
+        parkingLotId: String,
+        floorId: String,
+        spotNumber: String,
+        type: String,
+        rowIndex: Int,
+        colIndex: Int,
+        widthM: Double?,
+        heightM: Double?
+    ): Result<ParkingSpot> {
+        return try {
+            val response = apiService.adminCreateParkingSpot(
+                AdminCreateParkingSpotRequest(
+                    parkingLotId = parkingLotId,
+                    floorId = floorId,
+                    spotNumber = spotNumber,
+                    type = type,
+                    rowIndex = rowIndex,
+                    colIndex = colIndex,
+                    widthM = widthM,
+                    heightM = heightM
+                )
+            )
+
+            if (!response.isSuccessful) {
+                return Result.failure(
+                    Exception("No se pudo crear el cajón: ${response.errorBody()?.string()}")
+                )
+            }
+
+            val createdSpot = response.body()
+                ?: return Result.failure(Exception("Supabase no devolvió el cajón creado."))
+
+            Result.success(createdSpot.toDomain())
+
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
 }

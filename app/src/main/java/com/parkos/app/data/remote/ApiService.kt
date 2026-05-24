@@ -19,6 +19,8 @@ import retrofit2.http.Headers
 import retrofit2.http.POST
 import retrofit2.http.Query
 import com.parkos.app.data.remote.dto.AdminUpdateParkingSpotRequest
+import com.parkos.app.data.remote.dto.AdminCreateParkingSpotRequest
+import com.parkos.app.data.remote.dto.ParkingFloorDto
 
 interface ApiService {
 
@@ -37,12 +39,24 @@ interface ApiService {
         @Body request: AdminUpdateParkingSpotRequest
     ): Response<ParkingSpotDto>
 
+
+    @POST("rest/v1/rpc/admin_create_parking_spot")
+    suspend fun adminCreateParkingSpot(
+        @Body request: AdminCreateParkingSpotRequest
+    ): Response<ParkingSpotDto>
+
     @GET("rest/v1/users")
     suspend fun getUserProfile(
         @Header("Authorization") authorization: String,
         @Query("id") idFilter: String,
         @Query("select") select: String = "id,email,full_name,role,org_id"
     ): Response<List<UserProfileDto>>
+
+    @GET("rest/v1/parking_floors")
+    suspend fun getParkingFloors(
+        @Query("parking_lot_id") parkingLotIdFilter: String,
+        @Query("order") order: String = "floor_order.asc"
+    ): Response<List<ParkingFloorDto>>
 
     @Headers("Prefer: return=representation")
     @POST("rest/v1/users")

@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import com.parkos.app.domain.model.ParkingFloor
 
 @HiltViewModel
 class ParkingViewModel @Inject constructor(
@@ -74,6 +75,15 @@ class ParkingViewModel @Inject constructor(
     private val _isAdminUpdatingSpot = MutableStateFlow(false)
     val isAdminUpdatingSpot = _isAdminUpdatingSpot.asStateFlow()
 
+    private val _parkingFloors = MutableStateFlow<List<ParkingFloor>>(emptyList())
+    val parkingFloors = _parkingFloors.asStateFlow()
+
+    private val _isLoadingFloors = MutableStateFlow(false)
+    val isLoadingFloors = _isLoadingFloors.asStateFlow()
+
+    private val _isAdminCreatingSpot = MutableStateFlow(false)
+    val isAdminCreatingSpot = _isAdminCreatingSpot.asStateFlow()
+
     fun loadDashboard() {
         viewModelScope.launch {
             _isLoadingLots.value = true
@@ -125,11 +135,28 @@ class ParkingViewModel @Inject constructor(
         _selectedParkingLot.value = parkingLot
         _reservationMessage.value = null
         loadParkingSpots(parkingLot.id)
+        loadParkingFloors(parkingLot.id)
     }
 
     fun loadSelectedParkingLotSpots() {
         val lot = _selectedParkingLot.value ?: return
         loadParkingSpots(lot.id)
+    }
+
+    fun loadParkingFloors(parkingLotId: String) {
+        viewModelScope.launch {
+            _isLoadingFloors.value = true
+
+            val result = parkingRepository.getParkingFloors(parkingLotId)
+
+            result.onSuccess { floors ->
+                _parkingFloors.value = floors
+            }.onFailure { throwable ->
+                _error.value = throwable.message ?: "No se pudieron cargar los pisos."
+            }
+
+            _isLoadingFloors.value = false
+        }
     }
 
     private fun loadParkingSpots(parkingLotId: String) {
@@ -294,6 +321,63 @@ class ParkingViewModel @Inject constructor(
             }
 
             _isAdminUpdatingSpot.value = false
+        }
+    }
+    fun adminCreateParkingSpot(
+        floorId: String,
+        spotNumber: String,
+        type: String,
+        rowIndex: Int,
+        colIndex: Int,
+        widthM: Double?,
+        heightM: Double?
+    ) {
+        viewModelScope.launch {
+            if (_userRole.value != "admin") {
+                _error.value = "Solo administradores pueden crear cajones."
+                return@launch
+            }
+
+            val parkingLot = _selectedParkingLot.value
+
+            if (parkingLot == null) {
+                _error.value = "Selecciona un estacionamiento antes de crear cajones."
+                return@launch
+            }
+
+            if (spotNumber.isBlank()) {
+                _error.value = "El identificador del cajón es obligatorio."
+                return@launch
+            }
+
+            _isAdminCreatingSpot.value = true
+            _error.value = null
+            _reservationMessage.value = null
+
+            val result = parkingRepository.adminCreateParkingSpot(
+                parkingLotId = parkingLot.id,
+                floorId = floorId,
+                spotNumber = spotNumber,
+                type = type,
+                rowIndex = rowIndex,
+                colIndex = colIndex,
+                widthM = widthM,
+                heightM = heightM
+            )
+
+            result.onSuccess { createdSpot ->
+                _reservationMessage.value =
+                    "Cajón ${createdSpot.spotNumber} creado en mantenimiento."
+
+                loadSelectedParkingLotSpots()
+                loadParkingFloors(parkingLot.id)
+                loadDashboard()
+
+            }.onFailure { throwable ->
+                _error.value = throwable.message ?: "No se pudo crear el cajón."
+            }
+
+            _isAdminCreatingSpot.value = false
         }
     }
 

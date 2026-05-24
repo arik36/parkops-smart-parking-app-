@@ -77,6 +77,9 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import com.parkos.app.domain.model.ParkingFloor
 
 private val ParkosBackground = Color(0xFFF8EFE4)
 private val ParkosHomeOrange = Color(0xFFFE854F)
@@ -116,6 +119,9 @@ fun MapScreen(
     val selectedParkingLot by viewModel.selectedParkingLot.collectAsState()
     val spots by viewModel.spots.collectAsState()
     val activeReservation by viewModel.activeReservation.collectAsState()
+    val parkingFloors by viewModel.parkingFloors.collectAsState()
+    val isLoadingFloors by viewModel.isLoadingFloors.collectAsState()
+    val isAdminCreatingSpot by viewModel.isAdminCreatingSpot.collectAsState()
     val activeReservationSpotNumber by viewModel.activeReservationSpotNumber.collectAsState()
     val activeReservationParkingLotName by viewModel.activeReservationParkingLotName.collectAsState()
     val isLoadingLots by viewModel.isLoadingLots.collectAsState()
@@ -132,6 +138,8 @@ fun MapScreen(
     var showOccupyDialog by remember { mutableStateOf(false) }
     var showReleaseDialog by remember { mutableStateOf(false) }
     var spotToEditByAdmin by remember { mutableStateOf<ParkingSpot?>(null) }
+    var showAdminCreateSpotDialog by remember { mutableStateOf(false) }
+
 
     val tabs = listOf(
         BottomTab("Perfil", Icons.Default.Person),
@@ -180,6 +188,29 @@ fun MapScreen(
                 ) {
                     Text("Cancelar")
                 }
+            }
+        )
+    }
+    if (showAdminCreateSpotDialog) {
+        AdminCreateParkingSpotDialog(
+            floors = parkingFloors,
+            isSaving = isAdminCreatingSpot,
+            onDismiss = {
+                if (!isAdminCreatingSpot) {
+                    showAdminCreateSpotDialog = false
+                }
+            },
+            onCreate = { floorId, spotNumber, type, rowIndex, colIndex, widthM, heightM ->
+                viewModel.adminCreateParkingSpot(
+                    floorId = floorId,
+                    spotNumber = spotNumber,
+                    type = type,
+                    rowIndex = rowIndex,
+                    colIndex = colIndex,
+                    widthM = widthM,
+                    heightM = heightM
+                )
+                showAdminCreateSpotDialog = false
             }
         )
     }
@@ -363,14 +394,17 @@ fun MapScreen(
                 role = userRole,
                 selectedParkingLot = selectedParkingLot,
                 spots = spots,
+                parkingFloors = parkingFloors,
                 activeReservation = activeReservation,
                 activeReservationSpotNumber = activeReservationSpotNumber,
                 activeReservationParkingLotName = activeReservationParkingLotName,
                 isLoading = isLoadingSpots,
+                isLoadingFloors = isLoadingFloors,
                 isReserving = isReserving,
                 isOccupying = isOccupying,
                 isReleasing = isReleasing,
                 isAdminUpdatingSpot = isAdminUpdatingSpot,
+                isAdminCreatingSpot = isAdminCreatingSpot,
                 reservationMessage = reservationMessage,
                 error = error,
                 onRetry = { viewModel.loadSelectedParkingLotSpots() },
@@ -380,6 +414,9 @@ fun MapScreen(
                 },
                 onAdminEditSpotClick = { spot ->
                     spotToEditByAdmin = spot
+                },
+                onAdminCreateSpotClick = {
+                    showAdminCreateSpotDialog = true
                 },
                 onOccupyClick = {
                     showOccupyDialog = true
@@ -1995,20 +2032,24 @@ private fun MapTab(
     role: String?,
     selectedParkingLot: ParkingLot?,
     spots: List<ParkingSpot>,
+    parkingFloors: List<ParkingFloor>,
     activeReservation: Reservation?,
     activeReservationSpotNumber: String?,
     activeReservationParkingLotName: String?,
     isLoading: Boolean,
+    isLoadingFloors: Boolean,
     isReserving: Boolean,
     isOccupying: Boolean,
     isReleasing: Boolean,
     isAdminUpdatingSpot: Boolean,
+    isAdminCreatingSpot: Boolean,
     reservationMessage: String?,
     error: String?,
     onRetry: () -> Unit,
     onGoToParkingLots: () -> Unit,
     onReserveSpotClick: (ParkingSpot) -> Unit,
     onAdminEditSpotClick: (ParkingSpot) -> Unit,
+    onAdminCreateSpotClick: () -> Unit,
     onOccupyClick: () -> Unit,
     onReleaseClick: () -> Unit,
     onReservationExpired: () -> Unit,
@@ -2168,11 +2209,52 @@ private fun MapTab(
 
             if (role == "admin") {
                 item {
-                    Text(
-                        text = "Modo administrador: toca un cajón disponible o en mantenimiento para editarlo.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = ParkosMutedText
-                    )
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color.White
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp)
+                        ) {
+                            Text(
+                                text = "Modo administrador",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleMedium
+                            )
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            Text(
+                                text = "Toca un cajón disponible o en mantenimiento para editarlo. Para agregar uno nuevo, selecciona una celda libre con fila y columna.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = ParkosMutedText
+                            )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Button(
+                                onClick = onAdminCreateSpotClick,
+                                enabled = !isLoadingFloors && !isAdminCreatingSpot && parkingFloors.isNotEmpty(),
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = ParkosOrange
+                                )
+                            ) {
+                                Text(
+                                    text = when {
+                                        isLoadingFloors -> "Cargando pisos..."
+                                        isAdminCreatingSpot -> "Creando cajón..."
+                                        parkingFloors.isEmpty() -> "No hay pisos disponibles"
+                                        else -> "Agregar cajón"
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
@@ -2655,6 +2737,359 @@ private fun AdminEditParkingSpotDialog(
         }
     )
 }
+
+@Composable
+private fun AdminCreateParkingSpotDialog(
+    floors: List<ParkingFloor>,
+    isSaving: Boolean,
+    onDismiss: () -> Unit,
+    onCreate: (
+        floorId: String,
+        spotNumber: String,
+        type: String,
+        rowIndex: Int,
+        colIndex: Int,
+        widthM: Double?,
+        heightM: Double?
+    ) -> Unit
+) {
+    val firstFloor = floors.firstOrNull()
+
+    var selectedFloorId by remember(floors) {
+        mutableStateOf(firstFloor?.id.orEmpty())
+    }
+
+    var spotNumber by remember {
+        mutableStateOf("")
+    }
+
+    var selectedType by remember {
+        mutableStateOf("normal")
+    }
+
+    var rowIndexText by remember {
+        mutableStateOf("")
+    }
+
+    var colIndexText by remember {
+        mutableStateOf("")
+    }
+
+    var widthText by remember {
+        mutableStateOf("")
+    }
+
+    var heightText by remember {
+        mutableStateOf("")
+    }
+
+    var localError by remember {
+        mutableStateOf<String?>(null)
+    }
+
+    val selectedFloor = floors.firstOrNull { it.id == selectedFloorId }
+
+    val typeOptions = listOf(
+        "normal" to "Normal",
+        "disabled" to "Discapacitado",
+        "electric" to "Eléctrico",
+        "staff" to "Staff"
+    )
+
+    AlertDialog(
+        onDismissRequest = {
+            if (!isSaving) {
+                onDismiss()
+            }
+        },
+        title = {
+            Text(
+                text = "Agregar cajón",
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(520.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item {
+                    Text(
+                        text = "El cajón nuevo se creará en mantenimiento para que nadie pueda reservarlo hasta que lo revises.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ParkosMutedText
+                    )
+                }
+
+                item {
+                    Text(
+                        text = "Piso",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                item {
+                    if (floors.isEmpty()) {
+                        Text(
+                            text = "No hay pisos disponibles para este estacionamiento.",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    } else {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            floors.forEach { floor ->
+                                AdminOptionButton(
+                                    label = "${floor.name} (${floor.rows}x${floor.cols})",
+                                    selected = selectedFloorId == floor.id,
+                                    enabled = !isSaving,
+                                    onClick = {
+                                        selectedFloorId = floor.id
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    OutlinedTextField(
+                        value = spotNumber,
+                        onValueChange = {
+                            spotNumber = it.uppercase()
+                            localError = null
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = {
+                            Text("Identificador")
+                        },
+                        placeholder = {
+                            Text("Ej. A-04")
+                        },
+                        singleLine = true,
+                        enabled = !isSaving
+                    )
+                }
+
+                item {
+                    Text(
+                        text = "Tipo",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                item {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        typeOptions.forEach { option ->
+                            AdminOptionButton(
+                                label = option.second,
+                                selected = selectedType == option.first,
+                                enabled = !isSaving,
+                                onClick = {
+                                    selectedType = option.first
+                                }
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    Text(
+                        text = "Ubicación en el grid",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                item {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = rowIndexText,
+                            onValueChange = {
+                                rowIndexText = it.filter { char -> char.isDigit() }
+                                localError = null
+                            },
+                            modifier = Modifier.weight(1f),
+                            label = {
+                                Text("Fila")
+                            },
+                            singleLine = true,
+                            enabled = !isSaving,
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Number
+                            )
+                        )
+
+                        OutlinedTextField(
+                            value = colIndexText,
+                            onValueChange = {
+                                colIndexText = it.filter { char -> char.isDigit() }
+                                localError = null
+                            },
+                            modifier = Modifier.weight(1f),
+                            label = {
+                                Text("Columna")
+                            },
+                            singleLine = true,
+                            enabled = !isSaving,
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Number
+                            )
+                        )
+                    }
+                }
+
+                item {
+                    Text(
+                        text = selectedFloor?.let {
+                            "Rango permitido: filas 0-${it.rows - 1}, columnas 0-${it.cols - 1}"
+                        } ?: "Selecciona un piso para ver el rango permitido.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ParkosMutedText
+                    )
+                }
+
+                item {
+                    Text(
+                        text = "Dimensiones opcionales",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                item {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = widthText,
+                            onValueChange = {
+                                widthText = it.filter { char ->
+                                    char.isDigit() || char == '.'
+                                }
+                                localError = null
+                            },
+                            modifier = Modifier.weight(1f),
+                            label = {
+                                Text("Ancho m")
+                            },
+                            placeholder = {
+                                Text("2.5")
+                            },
+                            singleLine = true,
+                            enabled = !isSaving,
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Decimal
+                            )
+                        )
+
+                        OutlinedTextField(
+                            value = heightText,
+                            onValueChange = {
+                                heightText = it.filter { char ->
+                                    char.isDigit() || char == '.'
+                                }
+                                localError = null
+                            },
+                            modifier = Modifier.weight(1f),
+                            label = {
+                                Text("Largo m")
+                            },
+                            placeholder = {
+                                Text("5")
+                            },
+                            singleLine = true,
+                            enabled = !isSaving,
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Decimal
+                            )
+                        )
+                    }
+                }
+
+                if (localError != null) {
+                    item {
+                        Text(
+                            text = localError ?: "",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = !isSaving && floors.isNotEmpty(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = ParkosOrange
+                ),
+                onClick = {
+                    val floor = selectedFloor
+                    val cleanSpotNumber = spotNumber.trim().uppercase()
+                    val rowIndex = rowIndexText.toIntOrNull()
+                    val colIndex = colIndexText.toIntOrNull()
+                    val widthM = widthText.toDoubleOrNull()
+                    val heightM = heightText.toDoubleOrNull()
+
+                    when {
+                        floor == null -> {
+                            localError = "Selecciona un piso."
+                        }
+
+                        cleanSpotNumber.isBlank() -> {
+                            localError = "Escribe el identificador del cajón."
+                        }
+
+                        rowIndex == null -> {
+                            localError = "Escribe una fila válida."
+                        }
+
+                        colIndex == null -> {
+                            localError = "Escribe una columna válida."
+                        }
+
+                        rowIndex < 0 || rowIndex >= floor.rows -> {
+                            localError = "La fila debe estar entre 0 y ${floor.rows - 1}."
+                        }
+
+                        colIndex < 0 || colIndex >= floor.cols -> {
+                            localError = "La columna debe estar entre 0 y ${floor.cols - 1}."
+                        }
+
+                        else -> {
+                            onCreate(
+                                selectedFloorId,
+                                cleanSpotNumber,
+                                selectedType,
+                                rowIndex,
+                                colIndex,
+                                widthM,
+                                heightM
+                            )
+                        }
+                    }
+                }
+            ) {
+                Text(if (isSaving) "Creando..." else "Crear")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                enabled = !isSaving,
+                onClick = onDismiss
+            ) {
+                Text("Cancelar")
+            }
+        }
+    )
+}
+
 
 
 @Composable
