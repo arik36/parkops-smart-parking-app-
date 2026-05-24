@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import com.parkos.app.domain.model.ParkingFloor
+import com.parkos.app.domain.model.ParkingLayoutElement
 
 @HiltViewModel
 class ParkingViewModel @Inject constructor(
@@ -84,6 +85,12 @@ class ParkingViewModel @Inject constructor(
     private val _isAdminCreatingSpot = MutableStateFlow(false)
     val isAdminCreatingSpot = _isAdminCreatingSpot.asStateFlow()
 
+    private val _layoutElements = MutableStateFlow<List<ParkingLayoutElement>>(emptyList())
+    val layoutElements = _layoutElements.asStateFlow()
+
+    private val _isLoadingLayout = MutableStateFlow(false)
+    val isLoadingLayout = _isLoadingLayout.asStateFlow()
+
     fun loadDashboard() {
         viewModelScope.launch {
             _isLoadingLots.value = true
@@ -134,8 +141,10 @@ class ParkingViewModel @Inject constructor(
     fun selectParkingLot(parkingLot: ParkingLot) {
         _selectedParkingLot.value = parkingLot
         _reservationMessage.value = null
+
         loadParkingSpots(parkingLot.id)
         loadParkingFloors(parkingLot.id)
+        loadParkingLayoutElements(parkingLot.id)
     }
 
     fun loadSelectedParkingLotSpots() {
@@ -173,6 +182,21 @@ class ParkingViewModel @Inject constructor(
             }
 
             _isLoadingSpots.value = false
+        }
+    }
+    fun loadParkingLayoutElements(parkingLotId: String) {
+        viewModelScope.launch {
+            _isLoadingLayout.value = true
+
+            val result = parkingRepository.getParkingLayoutElements(parkingLotId)
+
+            result.onSuccess { elements ->
+                _layoutElements.value = elements
+            }.onFailure { throwable ->
+                _error.value = throwable.message ?: "No se pudo cargar el layout del estacionamiento."
+            }
+
+            _isLoadingLayout.value = false
         }
     }
 
@@ -314,8 +338,16 @@ class ParkingViewModel @Inject constructor(
 
             result.onSuccess {
                 _reservationMessage.value = "Cajón ${spot.spotNumber} actualizado correctamente."
+
+                val parkingLot = _selectedParkingLot.value
+
                 loadSelectedParkingLotSpots()
                 loadDashboard()
+
+                if (parkingLot != null) {
+                    loadParkingLayoutElements(parkingLot.id)
+                }
+
             }.onFailure { throwable ->
                 _error.value = throwable.message ?: "No se pudo actualizar el cajón."
             }
@@ -371,6 +403,7 @@ class ParkingViewModel @Inject constructor(
 
                 loadSelectedParkingLotSpots()
                 loadParkingFloors(parkingLot.id)
+                loadParkingLayoutElements(parkingLot.id)
                 loadDashboard()
 
             }.onFailure { throwable ->

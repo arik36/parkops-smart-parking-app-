@@ -80,6 +80,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import com.parkos.app.domain.model.ParkingFloor
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import com.parkos.app.domain.model.ParkingLayoutElement
 
 private val ParkosBackground = Color(0xFFF8EFE4)
 private val ParkosHomeOrange = Color(0xFFFE854F)
@@ -120,6 +123,8 @@ fun MapScreen(
     val spots by viewModel.spots.collectAsState()
     val activeReservation by viewModel.activeReservation.collectAsState()
     val parkingFloors by viewModel.parkingFloors.collectAsState()
+    val layoutElements by viewModel.layoutElements.collectAsState()
+    val isLoadingLayout by viewModel.isLoadingLayout.collectAsState()
     val isLoadingFloors by viewModel.isLoadingFloors.collectAsState()
     val isAdminCreatingSpot by viewModel.isAdminCreatingSpot.collectAsState()
     val activeReservationSpotNumber by viewModel.activeReservationSpotNumber.collectAsState()
@@ -395,11 +400,13 @@ fun MapScreen(
                 selectedParkingLot = selectedParkingLot,
                 spots = spots,
                 parkingFloors = parkingFloors,
+                layoutElements = layoutElements,
                 activeReservation = activeReservation,
                 activeReservationSpotNumber = activeReservationSpotNumber,
                 activeReservationParkingLotName = activeReservationParkingLotName,
                 isLoading = isLoadingSpots,
                 isLoadingFloors = isLoadingFloors,
+                isLoadingLayout = isLoadingLayout,
                 isReserving = isReserving,
                 isOccupying = isOccupying,
                 isReleasing = isReleasing,
@@ -2033,11 +2040,13 @@ private fun MapTab(
     selectedParkingLot: ParkingLot?,
     spots: List<ParkingSpot>,
     parkingFloors: List<ParkingFloor>,
+    layoutElements: List<ParkingLayoutElement>,
     activeReservation: Reservation?,
     activeReservationSpotNumber: String?,
     activeReservationParkingLotName: String?,
     isLoading: Boolean,
     isLoadingFloors: Boolean,
+    isLoadingLayout: Boolean,
     isReserving: Boolean,
     isOccupying: Boolean,
     isReleasing: Boolean,
@@ -2286,39 +2295,21 @@ private fun MapTab(
                         }
                     }
                 }
-
                 else -> {
                     item {
-                        val rowCount = ((spots.size + 2) / 3).coerceAtLeast(1)
-                        val gridHeight =
-                            (128.dp * rowCount.toFloat()) +
-                                    (12.dp * (rowCount - 1).toFloat())
-
-                        LazyVerticalGrid(
-                            columns = GridCells.Fixed(3),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(gridHeight),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            items(spots) { spot ->
-                                ParkingSpotCard(
-                                    role = role,
-                                    spot = spot,
-                                    activeReservation = activeReservation,
-                                    onClick = {
-                                        if (role == "admin") {
-                                            onAdminEditSpotClick(spot)
-                                        } else if (canReserveSpot(role, spot, activeReservation)) {
-                                            onReserveSpotClick(spot)
-                                        }
-                                    }
-                                )
-                            }
-                        }
+                        ParkingLayoutGrid(
+                            role = role,
+                            floors = parkingFloors,
+                            spots = spots,
+                            layoutElements = layoutElements,
+                            activeReservation = activeReservation,
+                            isLoadingLayout = isLoadingLayout,
+                            onReserveSpotClick = onReserveSpotClick,
+                            onAdminEditSpotClick = onAdminEditSpotClick
+                        )
                     }
                 }
+
             }
         }
     }
@@ -3184,6 +3175,341 @@ private fun ParkingSpotCard(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             softWrap = false
+        )
+    }
+}
+@Composable
+private fun ParkingLayoutGrid(
+    role: String?,
+    floors: List<ParkingFloor>,
+    spots: List<ParkingSpot>,
+    layoutElements: List<ParkingLayoutElement>,
+    activeReservation: Reservation?,
+    isLoadingLayout: Boolean,
+    onReserveSpotClick: (ParkingSpot) -> Unit,
+    onAdminEditSpotClick: (ParkingSpot) -> Unit
+) {
+    val firstFloor = floors.firstOrNull()
+
+    var selectedFloorId by remember(floors) {
+        mutableStateOf(firstFloor?.id.orEmpty())
+    }
+
+    val selectedFloor = floors.firstOrNull { it.id == selectedFloorId }
+        ?: firstFloor
+
+    if (selectedFloor == null) {
+        CenteredMessage(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(220.dp)
+        ) {
+            Text("No hay piso registrado para este estacionamiento.")
+        }
+        return
+    }
+
+    val elementsForFloor = layoutElements.filter {
+        it.floorId == selectedFloor.id
+    }
+
+    val elementsByPosition = elementsForFloor.associateBy {
+        it.rowIndex to it.colIndex
+    }
+
+    val spotsById = spots.associateBy {
+        it.id
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = "Plano del estacionamiento",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = "${selectedFloor.name} · ${selectedFloor.rows} filas x ${selectedFloor.cols} columnas",
+                        color = ParkosMutedText,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                if (isLoadingLayout) {
+                    CircularProgressIndicator(
+                        color = ParkosOrange,
+                        modifier = Modifier.size(22.dp),
+                        strokeWidth = 3.dp
+                    )
+                }
+            }
+
+            if (floors.size > 1) {
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    floors.forEach { floor ->
+                        OutlinedButton(
+                            onClick = {
+                                selectedFloorId = floor.id
+                            },
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(
+                                width = if (selectedFloorId == floor.id) 2.dp else 1.dp,
+                                color = if (selectedFloorId == floor.id) {
+                                    ParkosOrange
+                                } else {
+                                    Color.LightGray
+                                }
+                            )
+                        ) {
+                            Text(
+                                text = floor.name,
+                                color = if (selectedFloorId == floor.id) {
+                                    ParkosOrange
+                                } else {
+                                    Color.DarkGray
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    for (row in 0 until selectedFloor.rows) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            for (col in 0 until selectedFloor.cols) {
+                                val element = elementsByPosition[row to col]
+                                val spot = element?.parkingSpotId?.let { spotId ->
+                                    spotsById[spotId]
+                                }
+
+                                ParkingLayoutCell(
+                                    role = role,
+                                    row = row,
+                                    col = col,
+                                    element = element,
+                                    spot = spot,
+                                    activeReservation = activeReservation,
+                                    onReserveSpotClick = onReserveSpotClick,
+                                    onAdminEditSpotClick = onAdminEditSpotClick
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = "Puedes deslizar horizontalmente para ver todas las columnas.",
+                color = ParkosMutedText,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+}
+@Composable
+private fun ParkingLayoutCell(
+    role: String?,
+    row: Int,
+    col: Int,
+    element: ParkingLayoutElement?,
+    spot: ParkingSpot?,
+    activeReservation: Reservation?,
+    onReserveSpotClick: (ParkingSpot) -> Unit,
+    onAdminEditSpotClick: (ParkingSpot) -> Unit
+) {
+    if (spot != null) {
+        ParkingSpotMiniCard(
+            role = role,
+            spot = spot,
+            activeReservation = activeReservation,
+            onClick = {
+                if (role == "admin") {
+                    onAdminEditSpotClick(spot)
+                } else if (canReserveSpot(role, spot, activeReservation)) {
+                    onReserveSpotClick(spot)
+                }
+            }
+        )
+        return
+    }
+
+    if (element != null) {
+        LayoutElementMiniCard(
+            element = element
+        )
+        return
+    }
+
+    EmptyLayoutCell(
+        row = row,
+        col = col
+    )
+}
+@Composable
+private fun ParkingSpotMiniCard(
+    role: String?,
+    spot: ParkingSpot,
+    activeReservation: Reservation?,
+    onClick: () -> Unit
+) {
+    val backgroundColor = getSpotBackgroundColor(spot)
+    val borderColor = getSpotBorderColor(spot)
+    val textColor = getSpotTextColor(spot)
+    val isActiveUserSpot = activeReservation?.spotId == spot.id
+
+    Column(
+        modifier = Modifier
+            .size(width = 72.dp, height = 82.dp)
+            .background(
+                color = backgroundColor,
+                shape = RoundedCornerShape(16.dp)
+            )
+            .border(
+                width = if (isActiveUserSpot) 3.dp else 1.dp,
+                color = if (isActiveUserSpot) ParkosOrange else borderColor,
+                shape = RoundedCornerShape(16.dp)
+            )
+            .clickable(
+                enabled = role == "admin" || canReserveSpot(role, spot, activeReservation),
+                onClick = onClick
+            )
+            .padding(6.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = spot.spotNumber,
+            fontWeight = FontWeight.Bold,
+            color = textColor,
+            style = MaterialTheme.typography.labelMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        Text(
+            text = statusToCardLabel(spot.status),
+            color = textColor,
+            style = MaterialTheme.typography.labelSmall,
+            fontSize = 9.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        Text(
+            text = typeToCardLabel(spot.type),
+            color = textColor,
+            style = MaterialTheme.typography.labelSmall,
+            fontSize = 9.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+@Composable
+private fun EmptyLayoutCell(
+    row: Int,
+    col: Int
+) {
+    Box(
+        modifier = Modifier
+            .size(width = 72.dp, height = 82.dp)
+            .background(
+                color = Color(0xFFF7F7F7),
+                shape = RoundedCornerShape(16.dp)
+            )
+            .border(
+                width = 1.dp,
+                color = Color(0xFFE1E1E1),
+                shape = RoundedCornerShape(16.dp)
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "$row,$col",
+            color = Color(0xFFB0B0B0),
+            style = MaterialTheme.typography.labelSmall,
+            fontSize = 8.sp
+        )
+    }
+}
+
+@Composable
+private fun LayoutElementMiniCard(
+    element: ParkingLayoutElement
+) {
+    val label = when (element.elementType) {
+        "wall" -> "Muro"
+        "pillar" -> "Col."
+        "barrier" -> "Barrera"
+        "cabin" -> "Caseta"
+        "entrance" -> "Entrada"
+        "stairs" -> "Esc."
+        "reserved_area" -> "Reserv."
+        else -> element.elementType
+    }
+
+    Box(
+        modifier = Modifier
+            .size(width = 72.dp, height = 82.dp)
+            .background(
+                color = Color(0xFFE5E2DC),
+                shape = RoundedCornerShape(16.dp)
+            )
+            .border(
+                width = 1.dp,
+                color = Color(0xFF8A8378),
+                shape = RoundedCornerShape(16.dp)
+            )
+            .padding(6.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            color = Color(0xFF4E4A45),
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.labelSmall,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }

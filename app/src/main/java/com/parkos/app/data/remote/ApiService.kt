@@ -21,6 +21,7 @@ import retrofit2.http.Query
 import com.parkos.app.data.remote.dto.AdminUpdateParkingSpotRequest
 import com.parkos.app.data.remote.dto.AdminCreateParkingSpotRequest
 import com.parkos.app.data.remote.dto.ParkingFloorDto
+import com.parkos.app.data.remote.dto.ParkingLayoutElementDto
 
 interface ApiService {
 
@@ -51,6 +52,12 @@ interface ApiService {
         @Query("id") idFilter: String,
         @Query("select") select: String = "id,email,full_name,role,org_id"
     ): Response<List<UserProfileDto>>
+
+    @GET("rest/v1/parking_layout_elements")
+    suspend fun getParkingLayoutElements(
+        @Query("parking_lot_id") parkingLotIdFilter: String,
+        @Query("order") order: String = "row_index.asc,col_index.asc"
+    ): Response<List<ParkingLayoutElementDto>>
 
     @GET("rest/v1/parking_floors")
     suspend fun getParkingFloors(

@@ -14,6 +14,7 @@ import com.parkos.app.data.remote.dto.AdminCreateParkingSpotRequest
 import com.parkos.app.domain.model.ParkingFloor
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.parkos.app.domain.model.ParkingLayoutElement
 
 @Singleton
 class ParkingRepositoryImpl @Inject constructor(
@@ -67,6 +68,31 @@ class ParkingRepositoryImpl @Inject constructor(
             }
 
             Result.success(lotsWithAvailability)
+
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun getParkingLayoutElements(
+        parkingLotId: String
+    ): Result<List<ParkingLayoutElement>> {
+        return try {
+            val response = apiService.getParkingLayoutElements(
+                parkingLotIdFilter = "eq.$parkingLotId"
+            )
+
+            if (!response.isSuccessful) {
+                return Result.failure(
+                    Exception("No se pudo cargar el layout del estacionamiento: ${response.errorBody()?.string()}")
+                )
+            }
+
+            val layoutElements = response.body()
+                ?.map { it.toDomain() }
+                ?: emptyList()
+
+            Result.success(layoutElements)
 
         } catch (e: Exception) {
             Result.failure(e)
