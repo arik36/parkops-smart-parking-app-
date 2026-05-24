@@ -23,6 +23,12 @@ class ParkingViewModel @Inject constructor(
     private val _userRole = MutableStateFlow<String?>(null)
     val userRole = _userRole.asStateFlow()
 
+    private val _userFullName = MutableStateFlow<String?>(null)
+    val userFullName = _userFullName.asStateFlow()
+
+    private val _userEmail = MutableStateFlow<String?>(null)
+    val userEmail = _userEmail.asStateFlow()
+
     private val _userOrgId = MutableStateFlow<String?>(null)
     val userOrgId = _userOrgId.asStateFlow()
 
@@ -72,9 +78,13 @@ class ParkingViewModel @Inject constructor(
 
             val role = tokenManager.getUserTypeFlow().first()
             val orgId = tokenManager.getOrgIdFlow().first()
+            val fullName = tokenManager.getUserFullNameFlow().first()
+            val email = tokenManager.getUserEmailFlow().first()
 
             _userRole.value = role
             _userOrgId.value = orgId
+            _userFullName.value = fullName
+            _userEmail.value = email
 
             loadActiveReservationInternal()
 

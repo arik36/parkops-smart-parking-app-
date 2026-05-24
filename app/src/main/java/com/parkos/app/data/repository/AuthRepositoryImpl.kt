@@ -72,7 +72,9 @@ class AuthRepositoryImpl @Inject constructor(
                 token = loginBody.accessToken,
                 userId = profile.id,
                 userType = role,
-                orgId = profile.orgId
+                orgId = profile.orgId,
+                fullName = profile.fullName,
+                email = profile.email
             )
 
             val userEntity = UserEntity(
@@ -218,7 +220,9 @@ class AuthRepositoryImpl @Inject constructor(
                 token = accessToken,
                 userId = profile.id,
                 userType = safeRole,
-                orgId = profile.orgId
+                orgId = profile.orgId,
+                fullName = profile.fullName,
+                email = profile.email
             )
 
             val userEntity = UserEntity(

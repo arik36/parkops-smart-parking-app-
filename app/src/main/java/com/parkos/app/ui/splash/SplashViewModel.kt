@@ -27,27 +27,26 @@ class SplashViewModel @Inject constructor(
     }
 
     private fun checkSession() {
-
         viewModelScope.launch {
+            val token = tokenManager.getTokenFlow().first()
 
-            val token =
-                tokenManager.getTokenFlow().first()
-
-            val role =
-                tokenManager.getUserType()
-
-            if (token.isNullOrEmpty()) {
-
-                _uiState.value =
-                    SplashUiState.NotLogged
-
-            } else {
-
-                _uiState.value =
-                    SplashUiState.Logged(
-                        role ?: "consumer"
-                    )
+            if (token.isNullOrBlank()) {
+                _uiState.value = SplashUiState.NotLogged
+                return@launch
             }
+
+            if (tokenManager.isSessionExpired()) {
+                tokenManager.clearSession()
+                _uiState.value = SplashUiState.NotLogged
+                return@launch
+            }
+
+            val role = tokenManager.getUserType()
+
+            _uiState.value =
+                SplashUiState.Logged(
+                    role ?: "consumer"
+                )
         }
     }
 }

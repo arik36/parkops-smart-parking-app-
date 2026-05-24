@@ -14,4 +14,7 @@ val ParkosOrangeLight = Color(0xFFF4A62A)
 
 // Colores específicos del diseño
 val InputBorder = Color(0xFFf6a01e)   // borde de los campos Email/Password
-val ButtonBg = Color(0xFFffbd59)      // fondo del botón Iniciar Sesión
+val ButtonBg = Color(0xFFffbd59) // fondo del botón Iniciar Sesión
+
+//nuevo color para pantalla inicial
+val ColorFondoPPrincipal = Color(0xFFfe854f)
