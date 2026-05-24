@@ -109,6 +109,11 @@ private data class BottomTab(
     val label: String,
     val icon: ImageVector
 )
+private data class AdminCreateSpotTarget(
+    val floorId: String,
+    val rowIndex: Int,
+    val colIndex: Int
+)
 
 @Composable
 fun MapScreen(
@@ -144,6 +149,7 @@ fun MapScreen(
     var showReleaseDialog by remember { mutableStateOf(false) }
     var spotToEditByAdmin by remember { mutableStateOf<ParkingSpot?>(null) }
     var showAdminCreateSpotDialog by remember { mutableStateOf(false) }
+    var adminCreateSpotTarget by remember { mutableStateOf<AdminCreateSpotTarget?>(null) }
 
 
     val tabs = listOf(
@@ -199,10 +205,12 @@ fun MapScreen(
     if (showAdminCreateSpotDialog) {
         AdminCreateParkingSpotDialog(
             floors = parkingFloors,
+            initialTarget = adminCreateSpotTarget,
             isSaving = isAdminCreatingSpot,
             onDismiss = {
                 if (!isAdminCreatingSpot) {
                     showAdminCreateSpotDialog = false
+                    adminCreateSpotTarget = null
                 }
             },
             onCreate = { floorId, spotNumber, type, rowIndex, colIndex, widthM, heightM ->
@@ -216,6 +224,7 @@ fun MapScreen(
                     heightM = heightM
                 )
                 showAdminCreateSpotDialog = false
+                adminCreateSpotTarget = null
             }
         )
     }
@@ -423,6 +432,15 @@ fun MapScreen(
                     spotToEditByAdmin = spot
                 },
                 onAdminCreateSpotClick = {
+                    adminCreateSpotTarget = null
+                    showAdminCreateSpotDialog = true
+                },
+                onAdminCreateSpotAtCell = { floorId, rowIndex, colIndex ->
+                    adminCreateSpotTarget = AdminCreateSpotTarget(
+                        floorId = floorId,
+                        rowIndex = rowIndex,
+                        colIndex = colIndex
+                    )
                     showAdminCreateSpotDialog = true
                 },
                 onOccupyClick = {
@@ -2059,6 +2077,7 @@ private fun MapTab(
     onReserveSpotClick: (ParkingSpot) -> Unit,
     onAdminEditSpotClick: (ParkingSpot) -> Unit,
     onAdminCreateSpotClick: () -> Unit,
+    onAdminCreateSpotAtCell: (String, Int, Int) -> Unit,
     onOccupyClick: () -> Unit,
     onReleaseClick: () -> Unit,
     onReservationExpired: () -> Unit,
@@ -2305,7 +2324,8 @@ private fun MapTab(
                             activeReservation = activeReservation,
                             isLoadingLayout = isLoadingLayout,
                             onReserveSpotClick = onReserveSpotClick,
-                            onAdminEditSpotClick = onAdminEditSpotClick
+                            onAdminEditSpotClick = onAdminEditSpotClick,
+                            onAdminCreateSpotAtCell = onAdminCreateSpotAtCell
                         )
                     }
                 }
@@ -2732,6 +2752,7 @@ private fun AdminEditParkingSpotDialog(
 @Composable
 private fun AdminCreateParkingSpotDialog(
     floors: List<ParkingFloor>,
+    initialTarget: AdminCreateSpotTarget?,
     isSaving: Boolean,
     onDismiss: () -> Unit,
     onCreate: (
@@ -2745,9 +2766,10 @@ private fun AdminCreateParkingSpotDialog(
     ) -> Unit
 ) {
     val firstFloor = floors.firstOrNull()
+    val lockedLocation = initialTarget != null
 
-    var selectedFloorId by remember(floors) {
-        mutableStateOf(firstFloor?.id.orEmpty())
+    var selectedFloorId by remember(floors, initialTarget) {
+        mutableStateOf(initialTarget?.floorId ?: firstFloor?.id.orEmpty())
     }
 
     var spotNumber by remember {
@@ -2758,12 +2780,12 @@ private fun AdminCreateParkingSpotDialog(
         mutableStateOf("normal")
     }
 
-    var rowIndexText by remember {
-        mutableStateOf("")
+    var rowIndexText by remember(initialTarget) {
+        mutableStateOf(initialTarget?.rowIndex?.toString().orEmpty())
     }
 
-    var colIndexText by remember {
-        mutableStateOf("")
+    var colIndexText by remember(initialTarget) {
+        mutableStateOf(initialTarget?.colIndex?.toString().orEmpty())
     }
 
     var widthText by remember {
@@ -2836,7 +2858,7 @@ private fun AdminCreateParkingSpotDialog(
                                 AdminOptionButton(
                                     label = "${floor.name} (${floor.rows}x${floor.cols})",
                                     selected = selectedFloorId == floor.id,
-                                    enabled = !isSaving,
+                                    enabled = !isSaving && !lockedLocation,
                                     onClick = {
                                         selectedFloorId = floor.id
                                     }
@@ -2946,6 +2968,26 @@ private fun AdminCreateParkingSpotDialog(
                     )
                 }
 
+                if (lockedLocation) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = ParkosSoftOrange
+                            )
+                        ) {
+                            Text(
+                                text = "Ubicación seleccionada desde el plano: fila ${initialTarget?.rowIndex}, columna ${initialTarget?.colIndex}.",
+                                modifier = Modifier.padding(12.dp),
+                                color = ParkosOrange,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
+
                 item {
                     Text(
                         text = "Dimensiones opcionales",
@@ -2973,7 +3015,7 @@ private fun AdminCreateParkingSpotDialog(
                                 Text("2.5")
                             },
                             singleLine = true,
-                            enabled = !isSaving,
+                            enabled = !isSaving && !lockedLocation,
                             keyboardOptions = KeyboardOptions(
                                 keyboardType = KeyboardType.Decimal
                             )
@@ -2995,7 +3037,7 @@ private fun AdminCreateParkingSpotDialog(
                                 Text("5")
                             },
                             singleLine = true,
-                            enabled = !isSaving,
+                            enabled = !isSaving && !lockedLocation,
                             keyboardOptions = KeyboardOptions(
                                 keyboardType = KeyboardType.Decimal
                             )
@@ -3187,7 +3229,8 @@ private fun ParkingLayoutGrid(
     activeReservation: Reservation?,
     isLoadingLayout: Boolean,
     onReserveSpotClick: (ParkingSpot) -> Unit,
-    onAdminEditSpotClick: (ParkingSpot) -> Unit
+    onAdminEditSpotClick: (ParkingSpot) -> Unit,
+    onAdminCreateSpotAtCell: (String, Int, Int) -> Unit
 ) {
     val firstFloor = floors.firstOrNull()
 
@@ -3319,13 +3362,16 @@ private fun ParkingLayoutGrid(
 
                                 ParkingLayoutCell(
                                     role = role,
+                                    floorId = selectedFloor.id,
                                     row = row,
                                     col = col,
                                     element = element,
                                     spot = spot,
                                     activeReservation = activeReservation,
                                     onReserveSpotClick = onReserveSpotClick,
-                                    onAdminEditSpotClick = onAdminEditSpotClick
+                                    onAdminEditSpotClick = onAdminEditSpotClick,
+                                    onAdminCreateSpotAtCell = onAdminCreateSpotAtCell
+
                                 )
                             }
                         }
@@ -3346,13 +3392,15 @@ private fun ParkingLayoutGrid(
 @Composable
 private fun ParkingLayoutCell(
     role: String?,
+    floorId: String,
     row: Int,
     col: Int,
     element: ParkingLayoutElement?,
     spot: ParkingSpot?,
     activeReservation: Reservation?,
     onReserveSpotClick: (ParkingSpot) -> Unit,
-    onAdminEditSpotClick: (ParkingSpot) -> Unit
+    onAdminEditSpotClick: (ParkingSpot) -> Unit,
+    onAdminCreateSpotAtCell: (String, Int, Int) -> Unit
 ) {
     if (spot != null) {
         ParkingSpotMiniCard(
@@ -3379,7 +3427,11 @@ private fun ParkingLayoutCell(
 
     EmptyLayoutCell(
         row = row,
-        col = col
+        col = col,
+        canCreate = role == "admin",
+        onClick = {
+            onAdminCreateSpotAtCell(floorId, row, col)
+        }
     )
 }
 @Composable
@@ -3447,30 +3499,52 @@ private fun ParkingSpotMiniCard(
 @Composable
 private fun EmptyLayoutCell(
     row: Int,
-    col: Int
+    col: Int,
+    canCreate: Boolean,
+    onClick: () -> Unit
 ) {
     Box(
         modifier = Modifier
             .size(width = 72.dp, height = 82.dp)
             .background(
-                color = Color(0xFFF7F7F7),
+                color = if (canCreate) Color(0xFFFFFBF7) else Color(0xFFF7F7F7),
                 shape = RoundedCornerShape(16.dp)
             )
             .border(
                 width = 1.dp,
-                color = Color(0xFFE1E1E1),
+                color = if (canCreate) Color(0xFFFFD8BD) else Color(0xFFE1E1E1),
                 shape = RoundedCornerShape(16.dp)
+            )
+            .clickable(
+                enabled = canCreate,
+                onClick = onClick
             ),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = "$row,$col",
-            color = Color(0xFFB0B0B0),
-            style = MaterialTheme.typography.labelSmall,
-            fontSize = 8.sp
-        )
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "$row,$col",
+                color = if (canCreate) ParkosOrange else Color(0xFFB0B0B0),
+                style = MaterialTheme.typography.labelSmall,
+                fontSize = 8.sp
+            )
+
+            if (canCreate) {
+                Spacer(modifier = Modifier.height(2.dp))
+
+                Text(
+                    text = "+",
+                    color = ParkosOrange,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+        }
     }
 }
+
 
 @Composable
 private fun LayoutElementMiniCard(
