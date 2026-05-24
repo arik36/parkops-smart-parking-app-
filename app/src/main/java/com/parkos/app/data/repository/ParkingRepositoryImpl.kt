@@ -9,6 +9,7 @@ import com.parkos.app.domain.model.ParkingLot
 import com.parkos.app.domain.model.ParkingSpot
 import com.parkos.app.domain.model.Reservation
 import com.parkos.app.domain.repository.ParkingRepository
+import com.parkos.app.data.remote.dto.AdminUpdateParkingSpotRequest
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -182,6 +183,35 @@ class ParkingRepositoryImpl @Inject constructor(
             Result.failure(e)
         }
     }
+    override suspend fun adminUpdateParkingSpot(
+        spotId: String,
+        status: String,
+        type: String
+    ): Result<ParkingSpot> {
+        return try {
+            val response = apiService.adminUpdateParkingSpot(
+                AdminUpdateParkingSpotRequest(
+                    spotId = spotId,
+                    status = status,
+                    type = type
+                )
+            )
+
+            if (!response.isSuccessful) {
+                return Result.failure(
+                    Exception("No se pudo actualizar el cajón: ${response.errorBody()?.string()}")
+                )
+            }
+
+            val updatedSpot = response.body()
+                ?: return Result.failure(Exception("Supabase no devolvió el cajón actualizado."))
+
+            Result.success(updatedSpot.toDomain())
+
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 
     override suspend fun expireOldReservations(): Result<Unit> {
         return try {
@@ -233,4 +263,5 @@ class ParkingRepositoryImpl @Inject constructor(
             occupiedAt = occupiedAt
         )
     }
+
 }

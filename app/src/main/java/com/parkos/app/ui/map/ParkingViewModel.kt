@@ -71,6 +71,9 @@ class ParkingViewModel @Inject constructor(
     private val _error = MutableStateFlow<String?>(null)
     val error = _error.asStateFlow()
 
+    private val _isAdminUpdatingSpot = MutableStateFlow(false)
+    val isAdminUpdatingSpot = _isAdminUpdatingSpot.asStateFlow()
+
     fun loadDashboard() {
         viewModelScope.launch {
             _isLoadingLots.value = true
@@ -259,6 +262,38 @@ class ParkingViewModel @Inject constructor(
             loadActiveReservationInternal()
             loadSelectedParkingLotSpots()
             loadDashboard()
+        }
+    }
+    fun adminUpdateParkingSpot(
+        spot: ParkingSpot,
+        newStatus: String,
+        newType: String
+    ) {
+        viewModelScope.launch {
+            if (_userRole.value != "admin") {
+                _error.value = "Solo administradores pueden editar cajones."
+                return@launch
+            }
+
+            _isAdminUpdatingSpot.value = true
+            _error.value = null
+            _reservationMessage.value = null
+
+            val result = parkingRepository.adminUpdateParkingSpot(
+                spotId = spot.id,
+                status = newStatus,
+                type = newType
+            )
+
+            result.onSuccess {
+                _reservationMessage.value = "Cajón ${spot.spotNumber} actualizado correctamente."
+                loadSelectedParkingLotSpots()
+                loadDashboard()
+            }.onFailure { throwable ->
+                _error.value = throwable.message ?: "No se pudo actualizar el cajón."
+            }
+
+            _isAdminUpdatingSpot.value = false
         }
     }
 

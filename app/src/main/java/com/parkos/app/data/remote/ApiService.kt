@@ -18,6 +18,7 @@ import retrofit2.http.Header
 import retrofit2.http.Headers
 import retrofit2.http.POST
 import retrofit2.http.Query
+import com.parkos.app.data.remote.dto.AdminUpdateParkingSpotRequest
 
 interface ApiService {
 
@@ -30,6 +31,11 @@ interface ApiService {
     suspend fun register(
         @Body request: RegisterRequest
     ): Response<RegisterResponse>
+
+    @POST("rest/v1/rpc/admin_update_parking_spot")
+    suspend fun adminUpdateParkingSpot(
+        @Body request: AdminUpdateParkingSpotRequest
+    ): Response<ParkingSpotDto>
 
     @GET("rest/v1/users")
     suspend fun getUserProfile(

@@ -95,6 +95,9 @@ private val SearchFrameWhite = Color.White.copy(alpha = 0.37f)
 private val SearchInnerWhite = Color.White.copy(alpha = 0.74f)
 private val ResultsPanelWhite = Color.White.copy(alpha = 0.38f)
 private val ResultsHeaderOrange = Color(0xFFF6A01E).copy(alpha = 0.45f)
+private val ParkosSoftMaintenance = Color(0xFFE6E3DD)
+private val ParkosMaintenanceText = Color(0xFF4E4A45)
+private val ParkosMaintenanceBorder = Color(0xFF8A8378)
 
 private data class BottomTab(
     val label: String,
@@ -120,6 +123,7 @@ fun MapScreen(
     val isReserving by viewModel.isReserving.collectAsState()
     val isOccupying by viewModel.isOccupying.collectAsState()
     val isReleasing by viewModel.isReleasing.collectAsState()
+    val isAdminUpdatingSpot by viewModel.isAdminUpdatingSpot.collectAsState()
     val reservationMessage by viewModel.reservationMessage.collectAsState()
     val error by viewModel.error.collectAsState()
 
@@ -127,6 +131,7 @@ fun MapScreen(
     var spotToReserve by remember { mutableStateOf<ParkingSpot?>(null) }
     var showOccupyDialog by remember { mutableStateOf(false) }
     var showReleaseDialog by remember { mutableStateOf(false) }
+    var spotToEditByAdmin by remember { mutableStateOf<ParkingSpot?>(null) }
 
     val tabs = listOf(
         BottomTab("Perfil", Icons.Default.Person),
@@ -260,6 +265,25 @@ fun MapScreen(
             }
         )
     }
+    spotToEditByAdmin?.let { spot ->
+        AdminEditParkingSpotDialog(
+            spot = spot,
+            isSaving = isAdminUpdatingSpot,
+            onDismiss = {
+                if (!isAdminUpdatingSpot) {
+                    spotToEditByAdmin = null
+                }
+            },
+            onSave = { newStatus, newType ->
+                viewModel.adminUpdateParkingSpot(
+                    spot = spot,
+                    newStatus = newStatus,
+                    newType = newType
+                )
+                spotToEditByAdmin = null
+            }
+        )
+    }
 
     Scaffold(
         modifier = Modifier
@@ -346,12 +370,16 @@ fun MapScreen(
                 isReserving = isReserving,
                 isOccupying = isOccupying,
                 isReleasing = isReleasing,
+                isAdminUpdatingSpot = isAdminUpdatingSpot,
                 reservationMessage = reservationMessage,
                 error = error,
                 onRetry = { viewModel.loadSelectedParkingLotSpots() },
                 onGoToParkingLots = { selectedTab = 1 },
                 onReserveSpotClick = { spot ->
                     spotToReserve = spot
+                },
+                onAdminEditSpotClick = { spot ->
+                    spotToEditByAdmin = spot
                 },
                 onOccupyClick = {
                     showOccupyDialog = true
@@ -1974,19 +2002,20 @@ private fun MapTab(
     isReserving: Boolean,
     isOccupying: Boolean,
     isReleasing: Boolean,
+    isAdminUpdatingSpot: Boolean,
     reservationMessage: String?,
     error: String?,
     onRetry: () -> Unit,
     onGoToParkingLots: () -> Unit,
     onReserveSpotClick: (ParkingSpot) -> Unit,
+    onAdminEditSpotClick: (ParkingSpot) -> Unit,
     onOccupyClick: () -> Unit,
     onReleaseClick: () -> Unit,
     onReservationExpired: () -> Unit,
     onClearReservationMessage: () -> Unit
 ) {
     Column(
-        modifier = modifier
-            .background(ParkosBackground)
+        modifier = modifier.background(ParkosBackground)
     ) {
         HeaderSection(
             title = "Mapa del estacionamiento",
@@ -2017,140 +2046,194 @@ private fun MapTab(
             return
         }
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 20.dp)
-                .padding(top = 16.dp, bottom = 12.dp)
-        ) {
-            ActiveReservationCard(
-                activeReservation = activeReservation,
-                activeReservationSpotNumber = activeReservationSpotNumber,
-                activeReservationParkingLotName = activeReservationParkingLotName,
-                isOccupying = isOccupying,
-                isReleasing = isReleasing,
-                onOccupyClick = onOccupyClick,
-                onReleaseClick = onReleaseClick,
-                onReservationExpired = onReservationExpired
-            )
+        val maintenanceSpots = spots.filter {
+            it.status.equals("maintenance", ignoreCase = true)
+        }
 
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = 20.dp,
+                end = 20.dp,
+                top = 16.dp,
+                bottom = 28.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             if (activeReservation != null) {
-                Spacer(modifier = Modifier.height(12.dp))
+                item {
+                    ActiveReservationCard(
+                        activeReservation = activeReservation,
+                        activeReservationSpotNumber = activeReservationSpotNumber,
+                        activeReservationParkingLotName = activeReservationParkingLotName,
+                        isOccupying = isOccupying,
+                        isReleasing = isReleasing,
+                        onOccupyClick = onOccupyClick,
+                        onReleaseClick = onReleaseClick,
+                        onReservationExpired = onReservationExpired
+                    )
+                }
             }
 
-            ParkingLegend()
+            item {
+                ParkingLegend()
+            }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            if (role != "admin" && maintenanceSpots.isNotEmpty()) {
+                item {
+                    MaintenanceWarningCard(
+                        maintenanceSpots = maintenanceSpots
+                    )
+                }
+            }
 
             if (reservationMessage != null) {
-                MessageCard(
-                    message = reservationMessage,
-                    backgroundColor = ParkosSoftGreen,
-                    textColor = Color(0xFF1B5E20),
-                    onDismiss = onClearReservationMessage
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
+                item {
+                    MessageCard(
+                        message = reservationMessage,
+                        backgroundColor = ParkosSoftGreen,
+                        textColor = Color(0xFF1B5E20),
+                        onDismiss = onClearReservationMessage
+                    )
+                }
             }
 
             if (error != null) {
-                MessageCard(
-                    message = error,
-                    backgroundColor = ParkosSoftRed,
-                    textColor = Color(0xFF8E1B1B),
-                    actionText = "Reintentar",
-                    onDismiss = onRetry
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
+                item {
+                    MessageCard(
+                        message = error,
+                        backgroundColor = ParkosSoftRed,
+                        textColor = Color(0xFF8E1B1B),
+                        actionText = "Reintentar",
+                        onDismiss = onRetry
+                    )
+                }
             }
 
             if (isReserving || isOccupying) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(bottom = 12.dp)
-                ) {
-                    CircularProgressIndicator(
-                        color = ParkosOrange,
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 3.dp
-                    )
+                item {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            color = ParkosOrange,
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 3.dp
+                        )
 
-                    Spacer(modifier = Modifier.width(10.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
 
-                    Text(
-                        text = if (isOccupying) {
-                            "Confirmando llegada..."
-                        } else {
-                            "Reservando cajón..."
-                        }
-                    )
+                        Text(
+                            text = if (isOccupying) {
+                                "Confirmando llegada..."
+                            } else {
+                                "Reservando cajón..."
+                            }
+                        )
+                    }
+                }
+            }
+
+            if (isAdminUpdatingSpot) {
+                item {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            color = ParkosOrange,
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 3.dp
+                        )
+
+                        Spacer(modifier = Modifier.width(10.dp))
+
+                        Text("Actualizando cajón...")
+                    }
                 }
             }
 
             if (activeReservation == null && role != "admin") {
-                Text(
-                    text = if (role == "collaborator") {
-                        "Toca un cajón staff disponible para reservarlo."
-                    } else {
-                        "Toca un cajón disponible para reservarlo."
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ParkosMutedText
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
+                item {
+                    Text(
+                        text = if (role == "collaborator") {
+                            "Toca un cajón staff disponible para reservarlo."
+                        } else {
+                            "Toca un cajón disponible para reservarlo."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ParkosMutedText
+                    )
+                }
             }
 
             if (role == "admin") {
-                Text(
-                    text = "Modo administrador: solo visualización de cajones.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ParkosMutedText
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
+                item {
+                    Text(
+                        text = "Modo administrador: toca un cajón disponible o en mantenimiento para editarlo.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ParkosMutedText
+                    )
+                }
             }
 
             when {
                 isLoading -> {
-                    CenteredMessage(
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        CircularProgressIndicator(color = ParkosOrange)
+                    item {
+                        CenteredMessage(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(240.dp)
+                        ) {
+                            CircularProgressIndicator(color = ParkosOrange)
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                            Spacer(modifier = Modifier.height(12.dp))
 
-                        Text("Cargando cajones...")
+                            Text("Cargando cajones...")
+                        }
                     }
                 }
 
                 spots.isEmpty() -> {
-                    CenteredMessage(
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("No hay cajones registrados.")
+                    item {
+                        CenteredMessage(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(240.dp)
+                        ) {
+                            Text("No hay cajones registrados.")
+                        }
                     }
                 }
 
                 else -> {
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(3),
-                        modifier = Modifier.weight(1f),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        items(spots) { spot ->
-                            ParkingSpotCard(
-                                role = role,
-                                spot = spot,
-                                activeReservation = activeReservation,
-                                onClick = {
-                                    if (canReserveSpot(role, spot, activeReservation)) {
-                                        onReserveSpotClick(spot)
+                    item {
+                        val rowCount = ((spots.size + 2) / 3).coerceAtLeast(1)
+                        val gridHeight =
+                            (128.dp * rowCount.toFloat()) +
+                                    (12.dp * (rowCount - 1).toFloat())
+
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(3),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(gridHeight),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(spots) { spot ->
+                                ParkingSpotCard(
+                                    role = role,
+                                    spot = spot,
+                                    activeReservation = activeReservation,
+                                    onClick = {
+                                        if (role == "admin") {
+                                            onAdminEditSpotClick(spot)
+                                        } else if (canReserveSpot(role, spot, activeReservation)) {
+                                            onReserveSpotClick(spot)
+                                        }
                                     }
-                                }
-                            )
+                                )
+                            }
                         }
                     }
                 }
@@ -2372,7 +2455,232 @@ private fun MessageCard(
         }
     }
 }
+@Composable
+private fun MaintenanceWarningCard(
+    maintenanceSpots: List<ParkingSpot>
+) {
+    val spotNumbers = maintenanceSpots
+        .joinToString(", ") { it.spotNumber }
 
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = ParkosSoftMaintenance
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = ParkosMaintenanceBorder
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp)
+        ) {
+            Text(
+                text = "Cajones en mantenimiento",
+                fontWeight = FontWeight.Bold,
+                color = ParkosMaintenanceText
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = "Por su seguridad no entre en la casilla $spotNumbers, ya que está en mantenimiento. Espere hasta que en la app aparezca como disponible. Gracias por su paciencia.",
+                color = ParkosMaintenanceText,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+}
+@Composable
+private fun AdminEditParkingSpotDialog(
+    spot: ParkingSpot,
+    isSaving: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (String, String) -> Unit
+) {
+    var selectedStatus by remember(spot.id) {
+        mutableStateOf(
+            if (spot.status.equals("maintenance", ignoreCase = true)) {
+                "maintenance"
+            } else {
+                "available"
+            }
+        )
+    }
+
+    var selectedType by remember(spot.id) {
+        mutableStateOf(spot.type.lowercase())
+    }
+
+    val isBlockedByUser = spot.status.equals("occupied", ignoreCase = true) ||
+            spot.status.equals("reserved", ignoreCase = true)
+
+    val statusOptions = listOf(
+        "available" to "Disponible",
+        "maintenance" to "Mantenimiento"
+    )
+
+    val typeOptions = listOf(
+        "normal" to "Normal",
+        "disabled" to "Discapacitado",
+        "electric" to "Eléctrico",
+        "staff" to "Staff"
+    )
+
+    AlertDialog(
+        onDismissRequest = {
+            if (!isSaving) {
+                onDismiss()
+            }
+        },
+        title = {
+            Text(
+                text = "Editar cajón ${spot.spotNumber}",
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column {
+                Text(
+                    text = "Estado actual: ${statusToSpanish(spot.status)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ParkosMutedText
+                )
+
+                Text(
+                    text = "Tipo actual: ${typeToSpanish(spot.type)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ParkosMutedText
+                )
+
+                if (isBlockedByUser) {
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = ParkosSoftRed
+                        )
+                    ) {
+                        Text(
+                            text = "Este cajón no se puede editar porque está reservado u ocupado por un usuario. Espera a que sea liberado para iniciar mantenimiento.",
+                            modifier = Modifier.padding(14.dp),
+                            color = Color(0xFF8E1B1B),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    return@Column
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    text = "Estado",
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    statusOptions.forEach { option ->
+                        AdminOptionButton(
+                            label = option.second,
+                            selected = selectedStatus == option.first,
+                            enabled = !isSaving,
+                            onClick = {
+                                selectedStatus = option.first
+                            }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    text = "Tipo",
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    typeOptions.forEach { option ->
+                        AdminOptionButton(
+                            label = option.second,
+                            selected = selectedType == option.first,
+                            enabled = !isSaving,
+                            onClick = {
+                                selectedType = option.first
+                            }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Text(
+                    text = "Tip: usa mantenimiento cuando el cajón tenga baches, cambios de tamaño, reparación, pintura o cualquier bloqueo operativo.",
+                    color = ParkosMutedText,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = !isSaving && !isBlockedByUser,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = ParkosOrange
+                ),
+                onClick = {
+                    onSave(selectedStatus, selectedType)
+                }
+            ) {
+                Text(if (isSaving) "Guardando..." else "Guardar")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                enabled = !isSaving,
+                onClick = onDismiss
+            ) {
+                Text(if (isBlockedByUser) "Entendido" else "Cancelar")
+            }
+        }
+    )
+}
+
+
+@Composable
+private fun AdminOptionButton(
+    label: String,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    OutlinedButton(
+        enabled = enabled,
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(
+            width = if (selected) 2.dp else 1.dp,
+            color = if (selected) ParkosOrange else Color.LightGray
+        )
+    ) {
+        Text(
+            text = label,
+            color = if (selected) ParkosOrange else Color.DarkGray,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+        )
+    }
+}
 @Composable
 private fun ParkingSpotCard(
     role: String?,
@@ -2399,7 +2707,7 @@ private fun ParkingSpotCard(
                 shape = RoundedCornerShape(22.dp)
             )
             .clickable(
-                enabled = canReserveSpot(role, spot, activeReservation),
+                enabled = role == "admin" || canReserveSpot(role, spot, activeReservation),
                 onClick = onClick
             )
             .padding(10.dp),
@@ -2410,27 +2718,40 @@ private fun ParkingSpotCard(
             text = spot.spotNumber,
             fontWeight = FontWeight.Bold,
             color = textColor,
-            style = MaterialTheme.typography.titleLarge
+            style = MaterialTheme.typography.titleLarge,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
 
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = spot.status.replaceFirstChar { it.uppercase() },
+            text = statusToCardLabel(spot.status),
             color = textColor,
             style = MaterialTheme.typography.bodySmall,
-            textAlign = TextAlign.Center
+            fontSize = if (spot.status.equals("maintenance", ignoreCase = true)) {
+                10.sp
+            } else {
+                12.sp
+            },
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            softWrap = false
         )
 
         Text(
-            text = spot.type.replaceFirstChar { it.uppercase() },
+            text = typeToCardLabel(spot.type),
             color = textColor,
             style = MaterialTheme.typography.bodySmall,
-            textAlign = TextAlign.Center
+            fontSize = 11.sp,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            softWrap = false
         )
     }
 }
-
 @Composable
 private fun ParkingLegend() {
     Card(
@@ -2449,37 +2770,68 @@ private fun ParkingLegend() {
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+            Column(
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                LegendItem("Disponible", ParkosSoftGreen)
-                LegendItem("Ocupado", ParkosSoftRed)
-                LegendItem("Reservado", ParkosSoftYellow)
-            }
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    LegendItem(
+                        label = "Disponible",
+                        color = ParkosSoftGreen,
+                        modifier = Modifier.weight(1f)
+                    )
 
-            Spacer(modifier = Modifier.height(10.dp))
+                    LegendItem(
+                        label = "Ocupado",
+                        color = ParkosSoftRed,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Start
-            ) {
-                LegendItem("Discapacitado", ParkosSoftBlue)
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    LegendItem(
+                        label = "Reservado",
+                        color = ParkosSoftYellow,
+                        modifier = Modifier.weight(1f)
+                    )
 
-                Spacer(modifier = Modifier.width(18.dp))
+                    LegendItem(
+                        label = "Discapacitado",
+                        color = ParkosSoftBlue,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
 
-                LegendItem("Staff", ParkosSoftPurple)
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    LegendItem(
+                        label = "Staff",
+                        color = ParkosSoftPurple,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    LegendItem(
+                        label = "Mantenimiento",
+                        color = ParkosSoftMaintenance,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
         }
     }
 }
-
 @Composable
 private fun LegendItem(
     label: String,
-    color: Color
+    color: Color,
+    modifier: Modifier = Modifier
 ) {
     Row(
+        modifier = modifier,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -2493,11 +2845,13 @@ private fun LegendItem(
 
         Text(
             text = label,
-            style = MaterialTheme.typography.bodySmall
+            style = MaterialTheme.typography.bodySmall,
+            fontSize = 12.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
-
 @Composable
 private fun CenteredMessage(
     modifier: Modifier = Modifier,
@@ -2531,36 +2885,38 @@ private fun canReserveSpot(
 
     return true
 }
-
 private fun getSpotBackgroundColor(spot: ParkingSpot): Color {
     return when {
+        spot.status.equals("maintenance", ignoreCase = true) -> ParkosSoftMaintenance
+        spot.status.equals("occupied", ignoreCase = true) -> ParkosSoftRed
+        spot.status.equals("reserved", ignoreCase = true) -> ParkosSoftYellow
         spot.type.equals("staff", ignoreCase = true) -> ParkosSoftPurple
         spot.type.equals("disabled", ignoreCase = true) -> ParkosSoftBlue
         spot.status.equals("available", ignoreCase = true) -> ParkosSoftGreen
-        spot.status.equals("occupied", ignoreCase = true) -> ParkosSoftRed
-        spot.status.equals("reserved", ignoreCase = true) -> ParkosSoftYellow
         else -> Color.White
     }
 }
 
 private fun getSpotBorderColor(spot: ParkingSpot): Color {
     return when {
+        spot.status.equals("maintenance", ignoreCase = true) -> ParkosMaintenanceBorder
+        spot.status.equals("occupied", ignoreCase = true) -> Color(0xFFC94A4A)
+        spot.status.equals("reserved", ignoreCase = true) -> Color(0xFFC49A22)
         spot.type.equals("staff", ignoreCase = true) -> Color(0xFF7A4BB7)
         spot.type.equals("disabled", ignoreCase = true) -> Color(0xFF2B6CB0)
         spot.status.equals("available", ignoreCase = true) -> Color(0xFF3C8D40)
-        spot.status.equals("occupied", ignoreCase = true) -> Color(0xFFC94A4A)
-        spot.status.equals("reserved", ignoreCase = true) -> Color(0xFFC49A22)
         else -> Color.LightGray
     }
 }
 
 private fun getSpotTextColor(spot: ParkingSpot): Color {
     return when {
+        spot.status.equals("maintenance", ignoreCase = true) -> ParkosMaintenanceText
+        spot.status.equals("occupied", ignoreCase = true) -> Color(0xFF9F2F2F)
+        spot.status.equals("reserved", ignoreCase = true) -> Color(0xFF7A5700)
         spot.type.equals("staff", ignoreCase = true) -> Color(0xFF5A2B93)
         spot.type.equals("disabled", ignoreCase = true) -> Color(0xFF144D84)
         spot.status.equals("available", ignoreCase = true) -> Color(0xFF256C2B)
-        spot.status.equals("occupied", ignoreCase = true) -> Color(0xFF9F2F2F)
-        spot.status.equals("reserved", ignoreCase = true) -> Color(0xFF7A5700)
         else -> Color.Black
     }
 }
@@ -2664,4 +3020,43 @@ private fun getInitial(fullName: String?): String {
         ?.firstOrNull()
         ?.uppercase()
         ?: "P"
+}
+
+private fun statusToSpanish(status: String): String {
+    return when (status.lowercase()) {
+        "available" -> "Disponible"
+        "reserved" -> "Reservado"
+        "occupied" -> "Ocupado"
+        "maintenance" -> "Mantenimiento"
+        else -> status
+    }
+}
+
+private fun typeToSpanish(type: String): String {
+    return when (type.lowercase()) {
+        "normal" -> "Normal"
+        "disabled" -> "Discapacitado"
+        "electric" -> "Eléctrico"
+        "staff" -> "Staff"
+        else -> type
+    }
+}
+private fun statusToCardLabel(status: String): String {
+    return when (status.lowercase()) {
+        "available" -> "Libre"
+        "reserved" -> "Reservado"
+        "occupied" -> "Ocupado"
+        "maintenance" -> "Mant."
+        else -> status
+    }
+}
+
+private fun typeToCardLabel(type: String): String {
+    return when (type.lowercase()) {
+        "normal" -> "Normal"
+        "disabled" -> "Discap."
+        "electric" -> "Eléctrico"
+        "staff" -> "Staff"
+        else -> type
+    }
 }

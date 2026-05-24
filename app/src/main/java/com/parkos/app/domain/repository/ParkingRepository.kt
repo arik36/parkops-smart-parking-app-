@@ -15,6 +15,12 @@ interface ParkingRepository {
         parkingLotId: String
     ): Result<List<ParkingSpot>>
 
+    suspend fun adminUpdateParkingSpot(
+        spotId: String,
+        status: String,
+        type: String
+    ): Result<ParkingSpot>
+
     suspend fun getActiveReservation(): Result<Reservation?>
 
     suspend fun reserveSpot(
