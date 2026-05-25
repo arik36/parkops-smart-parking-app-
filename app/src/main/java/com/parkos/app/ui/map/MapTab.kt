@@ -68,6 +68,7 @@ internal fun MapTab(
     onAdminEditSpotClick: (ParkingSpot) -> Unit,
     onAdminCreateSpotClick: () -> Unit,
     onAdminCreateSpotAtCell: (String, Int, Int) -> Unit,
+    onAdminLayoutElementClick: (ParkingLayoutElement) -> Unit,
     onOccupyClick: () -> Unit,
     onReleaseClick: () -> Unit,
     onReservationExpired: () -> Unit,
@@ -316,7 +317,8 @@ internal fun MapTab(
                             isLoadingLayout = isLoadingLayout,
                             onReserveSpotClick = onReserveSpotClick,
                             onAdminEditSpotClick = onAdminEditSpotClick,
-                            onAdminCreateSpotAtCell = onAdminCreateSpotAtCell
+                            onAdminCreateSpotAtCell = onAdminCreateSpotAtCell,
+                            onAdminLayoutElementClick = onAdminLayoutElementClick
                         )
                     }
                 }

@@ -52,7 +52,8 @@ internal fun ParkingLayoutGrid(
     isLoadingLayout: Boolean,
     onReserveSpotClick: (ParkingSpot) -> Unit,
     onAdminEditSpotClick: (ParkingSpot) -> Unit,
-    onAdminCreateSpotAtCell: (String, Int, Int) -> Unit
+    onAdminCreateSpotAtCell: (String, Int, Int) -> Unit,
+    onAdminLayoutElementClick: (ParkingLayoutElement) -> Unit
 ) {
     val firstFloor = floors.firstOrNull()
 
@@ -192,7 +193,8 @@ internal fun ParkingLayoutGrid(
                                     activeReservation = activeReservation,
                                     onReserveSpotClick = onReserveSpotClick,
                                     onAdminEditSpotClick = onAdminEditSpotClick,
-                                    onAdminCreateSpotAtCell = onAdminCreateSpotAtCell
+                                    onAdminCreateSpotAtCell = onAdminCreateSpotAtCell,
+                                    onAdminLayoutElementClick = onAdminLayoutElementClick
                                 )
                             }
                         }
@@ -222,7 +224,8 @@ private fun ParkingLayoutCell(
     activeReservation: Reservation?,
     onReserveSpotClick: (ParkingSpot) -> Unit,
     onAdminEditSpotClick: (ParkingSpot) -> Unit,
-    onAdminCreateSpotAtCell: (String, Int, Int) -> Unit
+    onAdminCreateSpotAtCell: (String, Int, Int) -> Unit,
+    onAdminLayoutElementClick: (ParkingLayoutElement) -> Unit
 ) {
     if (spot != null) {
         ParkingSpotMiniCard(
@@ -242,7 +245,13 @@ private fun ParkingLayoutCell(
 
     if (element != null) {
         LayoutElementMiniCard(
-            element = element
+            element = element,
+            canEdit = role == "admin" && element.parkingSpotId == null,
+            onClick = {
+                if (role == "admin" && element.parkingSpotId == null) {
+                    onAdminLayoutElementClick(element)
+                }
+            }
         )
         return
     }
@@ -371,7 +380,9 @@ private fun EmptyLayoutCell(
 
 @Composable
 private fun LayoutElementMiniCard(
-    element: ParkingLayoutElement
+    element: ParkingLayoutElement,
+    canEdit: Boolean,
+    onClick: () -> Unit
 ) {
     val label = when (element.elementType) {
         "wall" -> "Muro"
@@ -380,7 +391,7 @@ private fun LayoutElementMiniCard(
         "cabin" -> "Caseta"
         "entrance" -> "Entrada"
         "stairs" -> "Esc."
-        "reserved_area" -> "Reserv."
+        "reserved_area" -> "Área"
         else -> element.elementType
     }
 
@@ -396,11 +407,15 @@ private fun LayoutElementMiniCard(
                 color = Color(0xFF8A8378),
                 shape = RoundedCornerShape(16.dp)
             )
+            .clickable(
+                enabled = canEdit,
+                onClick = onClick
+            )
             .padding(6.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = label,
+            text = element.label?.takeIf { it.isNotBlank() } ?: label,
             color = Color(0xFF4E4A45),
             fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.labelSmall,

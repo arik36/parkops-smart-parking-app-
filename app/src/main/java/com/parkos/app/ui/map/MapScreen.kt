@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.parkos.app.domain.model.ParkingSpot
 import com.parkos.app.ui.theme.ParkosOrange
+import com.parkos.app.domain.model.ParkingLayoutElement
 
 
 @Composable
@@ -49,6 +50,8 @@ fun MapScreen(
     val layoutElements by viewModel.layoutElements.collectAsState()
     val isLoadingLayout by viewModel.isLoadingLayout.collectAsState()
     val isLoadingFloors by viewModel.isLoadingFloors.collectAsState()
+    val isAdminCreatingLayoutElement by viewModel.isAdminCreatingLayoutElement.collectAsState()
+    val isAdminDeletingLayoutElement by viewModel.isAdminDeletingLayoutElement.collectAsState()
     val isAdminCreatingSpot by viewModel.isAdminCreatingSpot.collectAsState()
     val activeReservationSpotNumber by viewModel.activeReservationSpotNumber.collectAsState()
     val activeReservationParkingLotName by viewModel.activeReservationParkingLotName.collectAsState()
@@ -69,6 +72,8 @@ fun MapScreen(
     var spotToEditByAdmin by remember { mutableStateOf<ParkingSpot?>(null) }
     var showAdminCreateSpotDialog by remember { mutableStateOf(false) }
     var adminCreateSpotTarget by remember { mutableStateOf<AdminCreateSpotTarget?>(null) }
+    var adminLayoutCellTarget by remember { mutableStateOf<AdminLayoutCellTarget?>(null) }
+    var layoutElementToEdit by remember { mutableStateOf<ParkingLayoutElement?>(null) }
 
 
     val tabs = listOf(
@@ -118,6 +123,53 @@ fun MapScreen(
                 ) {
                     Text("Cancelar")
                 }
+            }
+        )
+    }
+    adminLayoutCellTarget?.let { target ->
+        AdminLayoutCellActionDialog(
+            target = target,
+            isCreatingElement = isAdminCreatingLayoutElement,
+            onDismiss = {
+                if (!isAdminCreatingLayoutElement) {
+                    adminLayoutCellTarget = null
+                }
+            },
+            onCreateSpot = {
+                adminCreateSpotTarget = AdminCreateSpotTarget(
+                    floorId = target.floorId,
+                    rowIndex = target.rowIndex,
+                    colIndex = target.colIndex
+                )
+                adminLayoutCellTarget = null
+                showAdminCreateSpotDialog = true
+            },
+            onCreateElement = { elementType, label, description ->
+                viewModel.adminCreateLayoutElement(
+                    floorId = target.floorId,
+                    elementType = elementType,
+                    rowIndex = target.rowIndex,
+                    colIndex = target.colIndex,
+                    label = label,
+                    description = description
+                )
+                adminLayoutCellTarget = null
+            }
+        )
+    }
+
+    layoutElementToEdit?.let { element ->
+        AdminLayoutElementDialog(
+            element = element,
+            isDeleting = isAdminDeletingLayoutElement,
+            onDismiss = {
+                if (!isAdminDeletingLayoutElement) {
+                    layoutElementToEdit = null
+                }
+            },
+            onDelete = {
+                viewModel.adminDeleteLayoutElement(element)
+                layoutElementToEdit = null
             }
         )
     }
@@ -360,12 +412,14 @@ fun MapScreen(
                     showAdminCreateSpotDialog = true
                 },
                 onAdminCreateSpotAtCell = { floorId, rowIndex, colIndex ->
-                    adminCreateSpotTarget = AdminCreateSpotTarget(
+                    adminLayoutCellTarget = AdminLayoutCellTarget(
                         floorId = floorId,
                         rowIndex = rowIndex,
                         colIndex = colIndex
                     )
-                    showAdminCreateSpotDialog = true
+                },
+                onAdminLayoutElementClick = { element ->
+                    layoutElementToEdit = element
                 },
                 onOccupyClick = {
                     showOccupyDialog = true

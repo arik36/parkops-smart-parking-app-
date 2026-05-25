@@ -12,3 +12,9 @@ internal data class AdminCreateSpotTarget(
     val rowIndex: Int,
     val colIndex: Int
 )
+
+internal data class AdminLayoutCellTarget(
+    val floorId: String,
+    val rowIndex: Int,
+    val colIndex: Int
+)

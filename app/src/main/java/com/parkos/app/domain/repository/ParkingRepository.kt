@@ -6,6 +6,7 @@ import com.parkos.app.domain.model.Reservation
 import com.parkos.app.domain.model.ParkingFloor
 import com.parkos.app.domain.model.ParkingLayoutElement
 
+
 interface ParkingRepository {
 
     suspend fun getParkingLots(
@@ -51,6 +52,20 @@ interface ParkingRepository {
         widthM: Double?,
         heightM: Double?
     ): Result<ParkingSpot>
+
+    suspend fun adminCreateLayoutElement(
+        parkingLotId: String,
+        floorId: String,
+        elementType: String,
+        rowIndex: Int,
+        colIndex: Int,
+        label: String?,
+        description: String?
+    ): Result<ParkingLayoutElement>
+
+    suspend fun adminDeleteLayoutElement(
+        elementId: String
+    ): Result<ParkingLayoutElement>
 
     suspend fun getParkingLayoutElements(
         parkingLotId: String

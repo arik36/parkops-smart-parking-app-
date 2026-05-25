@@ -16,6 +16,7 @@ import javax.inject.Inject
 import com.parkos.app.domain.model.ParkingFloor
 import com.parkos.app.domain.model.ParkingLayoutElement
 
+
 @HiltViewModel
 class ParkingViewModel @Inject constructor(
     private val parkingRepository: ParkingRepository,
@@ -93,6 +94,12 @@ class ParkingViewModel @Inject constructor(
 
     private val _isAdminDeletingSpot = MutableStateFlow(false)
     val isAdminDeletingSpot = _isAdminDeletingSpot.asStateFlow()
+
+    private val _isAdminCreatingLayoutElement = MutableStateFlow(false)
+    val isAdminCreatingLayoutElement = _isAdminCreatingLayoutElement.asStateFlow()
+
+    private val _isAdminDeletingLayoutElement = MutableStateFlow(false)
+    val isAdminDeletingLayoutElement = _isAdminDeletingLayoutElement.asStateFlow()
 
     fun loadDashboard() {
         viewModelScope.launch {
@@ -459,6 +466,108 @@ class ParkingViewModel @Inject constructor(
             }
 
             _isAdminDeletingSpot.value = false
+        }
+    }
+    fun adminCreateLayoutElement(
+        floorId: String,
+        elementType: String,
+        rowIndex: Int,
+        colIndex: Int,
+        label: String?,
+        description: String?
+    ) {
+        viewModelScope.launch {
+            if (_userRole.value != "admin") {
+                _error.value = "Solo administradores pueden agregar elementos al plano."
+                return@launch
+            }
+
+            val parkingLot = _selectedParkingLot.value
+
+            if (parkingLot == null) {
+                _error.value = "Selecciona un estacionamiento antes de agregar elementos."
+                return@launch
+            }
+
+            val allowedTypes = setOf(
+                "wall",
+                "pillar",
+                "barrier",
+                "cabin",
+                "entrance",
+                "stairs",
+                "reserved_area"
+            )
+
+            if (elementType !in allowedTypes) {
+                _error.value = "Tipo de elemento inválido."
+                return@launch
+            }
+
+            _isAdminCreatingLayoutElement.value = true
+            _error.value = null
+            _reservationMessage.value = null
+
+            val result = parkingRepository.adminCreateLayoutElement(
+                parkingLotId = parkingLot.id,
+                floorId = floorId,
+                elementType = elementType,
+                rowIndex = rowIndex,
+                colIndex = colIndex,
+                label = label?.takeIf { it.isNotBlank() },
+                description = description?.takeIf { it.isNotBlank() }
+            )
+
+            result.onSuccess {
+                _reservationMessage.value = "Elemento agregado al plano correctamente."
+
+                loadParkingLayoutElements(parkingLot.id)
+            }.onFailure { throwable ->
+                _error.value = throwable.message ?: "No se pudo agregar el elemento al plano."
+            }
+
+            _isAdminCreatingLayoutElement.value = false
+        }
+    }
+
+    fun adminDeleteLayoutElement(
+        element: ParkingLayoutElement
+    ) {
+        viewModelScope.launch {
+            if (_userRole.value != "admin") {
+                _error.value = "Solo administradores pueden eliminar elementos del plano."
+                return@launch
+            }
+
+            if (element.parkingSpotId != null) {
+                _error.value = "Este elemento está asociado a un cajón. Usa eliminar cajón."
+                return@launch
+            }
+
+            val parkingLot = _selectedParkingLot.value
+
+            if (parkingLot == null) {
+                _error.value = "Selecciona un estacionamiento antes de eliminar elementos."
+                return@launch
+            }
+
+            _isAdminDeletingLayoutElement.value = true
+            _error.value = null
+            _reservationMessage.value = null
+
+            val result = parkingRepository.adminDeleteLayoutElement(
+                elementId = element.id
+            )
+
+            result.onSuccess {
+                _reservationMessage.value = "Elemento eliminado del plano correctamente."
+
+                loadParkingLayoutElements(parkingLot.id)
+            }.onFailure { throwable ->
+                _error.value = throwable.message ?: "No se pudo eliminar el elemento del plano."
+            }
+
+            _isAdminDeletingLayoutElement.value = false
         }
     }
 

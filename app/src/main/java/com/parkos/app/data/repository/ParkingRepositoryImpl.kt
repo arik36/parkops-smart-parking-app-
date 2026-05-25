@@ -16,6 +16,10 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import com.parkos.app.domain.model.ParkingLayoutElement
 import com.parkos.app.data.remote.dto.AdminDeleteParkingSpotRequest
+import com.parkos.app.data.remote.dto.AdminCreateLayoutElementRequest
+import com.parkos.app.data.remote.dto.AdminDeleteLayoutElementRequest
+
+
 
 @Singleton
 class ParkingRepositoryImpl @Inject constructor(
@@ -377,6 +381,69 @@ class ParkingRepositoryImpl @Inject constructor(
                 ?: return Result.failure(Exception("Supabase no devolvió el cajón creado."))
 
             Result.success(createdSpot.toDomain())
+
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    override suspend fun adminCreateLayoutElement(
+        parkingLotId: String,
+        floorId: String,
+        elementType: String,
+        rowIndex: Int,
+        colIndex: Int,
+        label: String?,
+        description: String?
+    ): Result<ParkingLayoutElement> {
+        return try {
+            val response = apiService.adminCreateLayoutElement(
+                AdminCreateLayoutElementRequest(
+                    parkingLotId = parkingLotId,
+                    floorId = floorId,
+                    elementType = elementType,
+                    rowIndex = rowIndex,
+                    colIndex = colIndex,
+                    label = label,
+                    description = description
+                )
+            )
+
+            if (!response.isSuccessful) {
+                return Result.failure(
+                    Exception("No se pudo crear el elemento del plano: ${response.errorBody()?.string()}")
+                )
+            }
+
+            val createdElement = response.body()
+                ?: return Result.failure(Exception("Supabase no devolvió el elemento creado."))
+
+            Result.success(createdElement.toDomain())
+
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun adminDeleteLayoutElement(
+        elementId: String
+    ): Result<ParkingLayoutElement> {
+        return try {
+            val response = apiService.adminDeleteLayoutElement(
+                AdminDeleteLayoutElementRequest(
+                    elementId = elementId
+                )
+            )
+
+            if (!response.isSuccessful) {
+                return Result.failure(
+                    Exception("No se pudo eliminar el elemento del plano: ${response.errorBody()?.string()}")
+                )
+            }
+
+            val deletedElement = response.body()
+                ?: return Result.failure(Exception("Supabase no devolvió el elemento eliminado."))
+
+            Result.success(deletedElement.toDomain())
 
         } catch (e: Exception) {
             Result.failure(e)

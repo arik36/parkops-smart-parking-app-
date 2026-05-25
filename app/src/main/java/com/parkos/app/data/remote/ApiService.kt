@@ -23,6 +23,8 @@ import com.parkos.app.data.remote.dto.AdminCreateParkingSpotRequest
 import com.parkos.app.data.remote.dto.ParkingFloorDto
 import com.parkos.app.data.remote.dto.ParkingLayoutElementDto
 import com.parkos.app.data.remote.dto.AdminDeleteParkingSpotRequest
+import com.parkos.app.data.remote.dto.AdminCreateLayoutElementRequest
+import com.parkos.app.data.remote.dto.AdminDeleteLayoutElementRequest
 
 interface ApiService {
 
@@ -50,6 +52,16 @@ interface ApiService {
     suspend fun adminCreateParkingSpot(
         @Body request: AdminCreateParkingSpotRequest
     ): Response<ParkingSpotDto>
+
+    @POST("rest/v1/rpc/admin_create_layout_element")
+    suspend fun adminCreateLayoutElement(
+        @Body request: AdminCreateLayoutElementRequest
+    ): Response<ParkingLayoutElementDto>
+
+    @POST("rest/v1/rpc/admin_delete_layout_element")
+    suspend fun adminDeleteLayoutElement(
+        @Body request: AdminDeleteLayoutElementRequest
+    ): Response<ParkingLayoutElementDto>
 
     @GET("rest/v1/users")
     suspend fun getUserProfile(
