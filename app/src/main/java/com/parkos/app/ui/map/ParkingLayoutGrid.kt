@@ -384,27 +384,23 @@ private fun LayoutElementMiniCard(
     canEdit: Boolean,
     onClick: () -> Unit
 ) {
-    val label = when (element.elementType) {
-        "wall" -> "Muro"
-        "pillar" -> "Col."
-        "barrier" -> "Barrera"
-        "cabin" -> "Caseta"
-        "entrance" -> "Entrada"
-        "stairs" -> "Esc."
-        "reserved_area" -> "Área"
-        else -> element.elementType
-    }
+    val label = element.label?.takeIf { it.isNotBlank() }
+        ?: layoutElementShortLabel(element.elementType)
+
+    val backgroundColor = layoutElementBackgroundColor(element.elementType)
+    val borderColor = layoutElementBorderColor(element.elementType)
+    val textColor = layoutElementTextColor(element.elementType)
 
     Box(
         modifier = Modifier
             .size(width = 72.dp, height = 82.dp)
             .background(
-                color = Color(0xFFE5E2DC),
+                color = backgroundColor,
                 shape = RoundedCornerShape(16.dp)
             )
             .border(
                 width = 1.dp,
-                color = Color(0xFF8A8378),
+                color = borderColor,
                 shape = RoundedCornerShape(16.dp)
             )
             .clickable(
@@ -415,13 +411,64 @@ private fun LayoutElementMiniCard(
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = element.label?.takeIf { it.isNotBlank() } ?: label,
-            color = Color(0xFF4E4A45),
+            text = label,
+            color = textColor,
             fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.labelSmall,
             textAlign = TextAlign.Center,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
+    }
+}
+private fun layoutElementShortLabel(type: String): String {
+    return when (type) {
+        "wall" -> "Muro"
+        "pillar" -> "Col."
+        "barrier" -> "Barrera"
+        "cabin" -> "Caseta"
+        "entrance" -> "Entrada"
+        "stairs" -> "Esc."
+        "reserved_area" -> "Área"
+        else -> type
+    }
+}
+
+private fun layoutElementBackgroundColor(type: String): Color {
+    return when (type) {
+        "wall" -> Color(0xFFD4D4D4)
+        "pillar" -> Color(0xFFB8B8B8)
+        "barrier" -> Color(0xFFFFD7B5)
+        "cabin" -> Color(0xFFE8D8C3)
+        "entrance" -> Color(0xFFDDF3F2)
+        "stairs" -> Color(0xFFDDE5EC)
+        "reserved_area" -> Color(0xFFEAD8B8)
+        else -> Color(0xFFE5E2DC)
+    }
+}
+
+private fun layoutElementBorderColor(type: String): Color {
+    return when (type) {
+        "wall" -> Color(0xFF555555)
+        "pillar" -> Color(0xFF3F3F3F)
+        "barrier" -> Color(0xFFB85C19)
+        "cabin" -> Color(0xFF8A6A45)
+        "entrance" -> Color(0xFF278486)
+        "stairs" -> Color(0xFF5B7184)
+        "reserved_area" -> Color(0xFF8A6A35)
+        else -> Color(0xFF8A8378)
+    }
+}
+
+private fun layoutElementTextColor(type: String): Color {
+    return when (type) {
+        "wall" -> Color(0xFF333333)
+        "pillar" -> Color(0xFF252525)
+        "barrier" -> Color(0xFF7A3500)
+        "cabin" -> Color(0xFF5E4528)
+        "entrance" -> Color(0xFF176063)
+        "stairs" -> Color(0xFF34495A)
+        "reserved_area" -> Color(0xFF5E4528)
+        else -> Color(0xFF4E4A45)
     }
 }
