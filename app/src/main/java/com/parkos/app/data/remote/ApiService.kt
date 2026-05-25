@@ -22,6 +22,7 @@ import com.parkos.app.data.remote.dto.AdminUpdateParkingSpotRequest
 import com.parkos.app.data.remote.dto.AdminCreateParkingSpotRequest
 import com.parkos.app.data.remote.dto.ParkingFloorDto
 import com.parkos.app.data.remote.dto.ParkingLayoutElementDto
+import com.parkos.app.data.remote.dto.AdminDeleteParkingSpotRequest
 
 interface ApiService {
 
@@ -40,6 +41,10 @@ interface ApiService {
         @Body request: AdminUpdateParkingSpotRequest
     ): Response<ParkingSpotDto>
 
+    @POST("rest/v1/rpc/admin_delete_parking_spot")
+    suspend fun adminDeleteParkingSpot(
+        @Body request: AdminDeleteParkingSpotRequest
+    ): Response<ParkingSpotDto>
 
     @POST("rest/v1/rpc/admin_create_parking_spot")
     suspend fun adminCreateParkingSpot(

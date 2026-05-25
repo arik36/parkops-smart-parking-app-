@@ -29,6 +29,10 @@ interface ParkingRepository {
         spotId: String
     ): Result<Unit>
 
+    suspend fun adminDeleteParkingSpot(
+        spotId: String
+    ): Result<ParkingSpot>
+
     suspend fun occupyReservedSpot(
         spotId: String
     ): Result<Unit>

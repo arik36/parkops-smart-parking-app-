@@ -58,6 +58,7 @@ fun MapScreen(
     val isOccupying by viewModel.isOccupying.collectAsState()
     val isReleasing by viewModel.isReleasing.collectAsState()
     val isAdminUpdatingSpot by viewModel.isAdminUpdatingSpot.collectAsState()
+    val isAdminDeletingSpot by viewModel.isAdminDeletingSpot.collectAsState()
     val reservationMessage by viewModel.reservationMessage.collectAsState()
     val error by viewModel.error.collectAsState()
 
@@ -232,8 +233,9 @@ fun MapScreen(
         AdminEditParkingSpotDialog(
             spot = spot,
             isSaving = isAdminUpdatingSpot,
+            isDeleting = isAdminDeletingSpot,
             onDismiss = {
-                if (!isAdminUpdatingSpot) {
+                if (!isAdminUpdatingSpot && !isAdminDeletingSpot) {
                     spotToEditByAdmin = null
                 }
             },
@@ -243,6 +245,10 @@ fun MapScreen(
                     newStatus = newStatus,
                     newType = newType
                 )
+                spotToEditByAdmin = null
+            },
+            onDelete = {
+                viewModel.adminDeleteParkingSpot(spot)
                 spotToEditByAdmin = null
             }
         )

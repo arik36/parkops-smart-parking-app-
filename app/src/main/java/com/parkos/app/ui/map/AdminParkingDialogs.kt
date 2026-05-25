@@ -39,8 +39,10 @@ import com.parkos.app.ui.theme.ParkosOrange
 internal fun AdminEditParkingSpotDialog(
     spot: ParkingSpot,
     isSaving: Boolean,
+    isDeleting: Boolean,
     onDismiss: () -> Unit,
-    onSave: (String, String) -> Unit
+    onSave: (String, String) -> Unit,
+    onDelete: () -> Unit
 ) {
     var selectedStatus by remember(spot.id) {
         mutableStateOf(
@@ -56,8 +58,16 @@ internal fun AdminEditParkingSpotDialog(
         mutableStateOf(spot.type.lowercase())
     }
 
+    var showDeleteConfirm by remember(spot.id) {
+        mutableStateOf(false)
+    }
+
+    val isBusy = isSaving || isDeleting
+
     val isBlockedByUser = spot.status.equals("occupied", ignoreCase = true) ||
             spot.status.equals("reserved", ignoreCase = true)
+
+    val canDelete = spot.status.equals("maintenance", ignoreCase = true)
 
     val statusOptions = listOf(
         "available" to "Disponible",
@@ -71,9 +81,56 @@ internal fun AdminEditParkingSpotDialog(
         "staff" to "Staff"
     )
 
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!isBusy) {
+                    showDeleteConfirm = false
+                }
+            },
+            title = {
+                Text(
+                    text = "Eliminar cajón ${spot.spotNumber}",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = "Esta acción eliminará el cajón del estacionamiento y del plano. Solo debe hacerse si el cajón fue creado por error o nunca debe existir físicamente."
+                )
+            },
+            confirmButton = {
+                Button(
+                    enabled = !isBusy,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFC94A4A)
+                    ),
+                    onClick = {
+                        onDelete()
+                        showDeleteConfirm = false
+                    }
+                ) {
+                    Text(if (isDeleting) "Eliminando..." else "Eliminar")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !isBusy,
+                    onClick = {
+                        showDeleteConfirm = false
+                    }
+                ) {
+                    Text("Cancelar")
+                }
+            }
+        )
+
+        return
+    }
+
     AlertDialog(
         onDismissRequest = {
-            if (!isSaving) {
+            if (!isBusy) {
                 onDismiss()
             }
         },
@@ -134,7 +191,7 @@ internal fun AdminEditParkingSpotDialog(
                         AdminOptionButton(
                             label = option.second,
                             selected = selectedStatus == option.first,
-                            enabled = !isSaving,
+                            enabled = !isBusy,
                             onClick = {
                                 selectedStatus = option.first
                             }
@@ -158,7 +215,7 @@ internal fun AdminEditParkingSpotDialog(
                         AdminOptionButton(
                             label = option.second,
                             selected = selectedType == option.first,
-                            enabled = !isSaving,
+                            enabled = !isBusy,
                             onClick = {
                                 selectedType = option.first
                             }
@@ -173,11 +230,60 @@ internal fun AdminEditParkingSpotDialog(
                     color = ParkosMutedText,
                     style = MaterialTheme.typography.bodySmall
                 )
+
+                if (canDelete) {
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFFFFEFEF)
+                        ),
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = Color(0xFFFFC4C4)
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp)
+                        ) {
+                            Text(
+                                text = "Zona de eliminación",
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF8E1B1B)
+                            )
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            Text(
+                                text = "Solo puedes eliminar cajones en mantenimiento. Si este cajón ya tiene historial de reservaciones, el servidor impedirá eliminarlo.",
+                                color = Color(0xFF8E1B1B),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            Button(
+                                enabled = !isBusy,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFFC94A4A)
+                                ),
+                                onClick = {
+                                    showDeleteConfirm = true
+                                }
+                            ) {
+                                Text("Eliminar cajón")
+                            }
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
             Button(
-                enabled = !isSaving && !isBlockedByUser,
+                enabled = !isBusy && !isBlockedByUser,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = ParkosOrange
                 ),
@@ -185,12 +291,18 @@ internal fun AdminEditParkingSpotDialog(
                     onSave(selectedStatus, selectedType)
                 }
             ) {
-                Text(if (isSaving) "Guardando..." else "Guardar")
+                Text(
+                    when {
+                        isSaving -> "Guardando..."
+                        isDeleting -> "Eliminando..."
+                        else -> "Guardar"
+                    }
+                )
             }
         },
         dismissButton = {
             TextButton(
-                enabled = !isSaving,
+                enabled = !isBusy,
                 onClick = onDismiss
             ) {
                 Text(if (isBlockedByUser) "Entendido" else "Cancelar")

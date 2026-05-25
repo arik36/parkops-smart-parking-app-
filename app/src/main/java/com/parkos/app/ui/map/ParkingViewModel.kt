@@ -91,6 +91,9 @@ class ParkingViewModel @Inject constructor(
     private val _isLoadingLayout = MutableStateFlow(false)
     val isLoadingLayout = _isLoadingLayout.asStateFlow()
 
+    private val _isAdminDeletingSpot = MutableStateFlow(false)
+    val isAdminDeletingSpot = _isAdminDeletingSpot.asStateFlow()
+
     fun loadDashboard() {
         viewModelScope.launch {
             _isLoadingLots.value = true
@@ -411,6 +414,51 @@ class ParkingViewModel @Inject constructor(
             }
 
             _isAdminCreatingSpot.value = false
+        }
+    }
+    fun adminDeleteParkingSpot(
+        spot: ParkingSpot
+    ) {
+        viewModelScope.launch {
+            if (_userRole.value != "admin") {
+                _error.value = "Solo administradores pueden eliminar cajones."
+                return@launch
+            }
+
+            if (!spot.status.equals("maintenance", ignoreCase = true)) {
+                _error.value = "Solo puedes eliminar cajones en mantenimiento."
+                return@launch
+            }
+
+            val parkingLot = _selectedParkingLot.value
+
+            if (parkingLot == null) {
+                _error.value = "Selecciona un estacionamiento antes de eliminar cajones."
+                return@launch
+            }
+
+            _isAdminDeletingSpot.value = true
+            _error.value = null
+            _reservationMessage.value = null
+
+            val result = parkingRepository.adminDeleteParkingSpot(
+                spotId = spot.id
+            )
+
+            result.onSuccess { deletedSpot ->
+                _reservationMessage.value =
+                    "Cajón ${deletedSpot.spotNumber} eliminado correctamente."
+
+                loadSelectedParkingLotSpots()
+                loadParkingFloors(parkingLot.id)
+                loadParkingLayoutElements(parkingLot.id)
+                loadDashboard()
+
+            }.onFailure { throwable ->
+                _error.value = throwable.message ?: "No se pudo eliminar el cajón."
+            }
+
+            _isAdminDeletingSpot.value = false
         }
     }
 

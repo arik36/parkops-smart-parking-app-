@@ -15,6 +15,7 @@ import com.parkos.app.domain.model.ParkingFloor
 import javax.inject.Inject
 import javax.inject.Singleton
 import com.parkos.app.domain.model.ParkingLayoutElement
+import com.parkos.app.data.remote.dto.AdminDeleteParkingSpotRequest
 
 @Singleton
 class ParkingRepositoryImpl @Inject constructor(
@@ -68,6 +69,32 @@ class ParkingRepositoryImpl @Inject constructor(
             }
 
             Result.success(lotsWithAvailability)
+
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun adminDeleteParkingSpot(
+        spotId: String
+    ): Result<ParkingSpot> {
+        return try {
+            val response = apiService.adminDeleteParkingSpot(
+                AdminDeleteParkingSpotRequest(
+                    spotId = spotId
+                )
+            )
+
+            if (!response.isSuccessful) {
+                return Result.failure(
+                    Exception("No se pudo eliminar el cajón: ${response.errorBody()?.string()}")
+                )
+            }
+
+            val deletedSpot = response.body()
+                ?: return Result.failure(Exception("Supabase no devolvió el cajón eliminado."))
+
+            Result.success(deletedSpot.toDomain())
 
         } catch (e: Exception) {
             Result.failure(e)
