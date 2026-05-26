@@ -60,6 +60,10 @@ internal fun MapTab(
     isReleasing: Boolean,
     isAdminUpdatingSpot: Boolean,
     isAdminCreatingSpot: Boolean,
+    movingLayoutElement: ParkingLayoutElement?,
+    isAdminMovingLayoutElement: Boolean,
+    onCancelMoveLayoutElement: () -> Unit,
+    onAdminMoveLayoutElementToCell: (String, Int, Int) -> Unit,
     reservationMessage: String?,
     error: String?,
     onRetry: () -> Unit,
@@ -167,6 +171,48 @@ internal fun MapTab(
                         actionText = "Reintentar",
                         onDismiss = onRetry
                     )
+                }
+            }
+            if (movingLayoutElement != null) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = ParkosSoftOrange
+                        ),
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = Color(0xFFFFC48A)
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp)
+                        ) {
+                            Text(
+                                text = "Modo mover",
+                                fontWeight = FontWeight.Bold,
+                                color = ParkosOrange
+                            )
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            Text(
+                                text = "Toca una celda vacía del plano para mover el elemento seleccionado.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = ParkosOrange
+                            )
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            TextButton(
+                                enabled = !isAdminMovingLayoutElement,
+                                onClick = onCancelMoveLayoutElement
+                            ) {
+                                Text("Cancelar movimiento", color = ParkosOrange)
+                            }
+                        }
+                    }
                 }
             }
 
@@ -314,11 +360,15 @@ internal fun MapTab(
                             spots = spots,
                             layoutElements = layoutElements,
                             activeReservation = activeReservation,
+                            movingLayoutElement = movingLayoutElement,
+                            isAdminMovingLayoutElement = isAdminMovingLayoutElement,
+                            onAdminMoveLayoutElementToCell = onAdminMoveLayoutElementToCell,
                             isLoadingLayout = isLoadingLayout,
                             onReserveSpotClick = onReserveSpotClick,
                             onAdminEditSpotClick = onAdminEditSpotClick,
                             onAdminCreateSpotAtCell = onAdminCreateSpotAtCell,
                             onAdminLayoutElementClick = onAdminLayoutElementClick
+
                         )
                     }
                 }

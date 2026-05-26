@@ -40,8 +40,11 @@ internal fun AdminEditParkingSpotDialog(
     spot: ParkingSpot,
     isSaving: Boolean,
     isDeleting: Boolean,
+    isMoving: Boolean,
+    canMove: Boolean,
     onDismiss: () -> Unit,
     onSave: (String, String) -> Unit,
+    onMove: () -> Unit,
     onDelete: () -> Unit
 ) {
     var selectedStatus by remember(spot.id) {
@@ -62,7 +65,7 @@ internal fun AdminEditParkingSpotDialog(
         mutableStateOf(false)
     }
 
-    val isBusy = isSaving || isDeleting
+    val isBusy = isSaving || isDeleting || isMoving
 
     val isBlockedByUser = spot.status.equals("occupied", ignoreCase = true) ||
             spot.status.equals("reserved", ignoreCase = true)
@@ -165,7 +168,7 @@ internal fun AdminEditParkingSpotDialog(
                         )
                     ) {
                         Text(
-                            text = "Este cajón no se puede editar porque está reservado u ocupado por un usuario. Espera a que sea liberado para iniciar mantenimiento.",
+                            text = "Este cajón no se puede editar ni mover porque está reservado u ocupado por un usuario.",
                             modifier = Modifier.padding(14.dp),
                             color = Color(0xFF8E1B1B),
                             style = MaterialTheme.typography.bodySmall
@@ -220,6 +223,22 @@ internal fun AdminEditParkingSpotDialog(
                                 selectedType = option.first
                             }
                         )
+                    }
+                }
+
+                if (canMove) {
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Button(
+                        enabled = !isBusy,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ParkosOrange
+                        ),
+                        onClick = onMove
+                    ) {
+                        Text(if (isMoving) "Moviendo..." else "Mover cajón")
                     }
                 }
 
@@ -295,6 +314,7 @@ internal fun AdminEditParkingSpotDialog(
                     when {
                         isSaving -> "Guardando..."
                         isDeleting -> "Eliminando..."
+                        isMoving -> "Moviendo..."
                         else -> "Guardar"
                     }
                 )
@@ -310,7 +330,6 @@ internal fun AdminEditParkingSpotDialog(
         }
     )
 }
-
 @Composable
 internal fun AdminCreateParkingSpotDialog(
     floors: List<ParkingFloor>,

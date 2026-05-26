@@ -38,6 +38,9 @@ class ParkingViewModel @Inject constructor(
     private val _parkingLots = MutableStateFlow<List<ParkingLot>>(emptyList())
     val parkingLots = _parkingLots.asStateFlow()
 
+    private val _isAdminMovingLayoutElement = MutableStateFlow(false)
+    val isAdminMovingLayoutElement = _isAdminMovingLayoutElement.asStateFlow()
+
     private val _selectedParkingLot = MutableStateFlow<ParkingLot?>(null)
     val selectedParkingLot = _selectedParkingLot.asStateFlow()
 
@@ -145,6 +148,65 @@ class ParkingViewModel @Inject constructor(
             }
 
             _isLoadingLots.value = false
+        }
+    }
+
+    fun adminMoveLayoutElement(
+        element: ParkingLayoutElement,
+        targetFloorId: String,
+        targetRowIndex: Int,
+        targetColIndex: Int
+    ) {
+        viewModelScope.launch {
+            if (_userRole.value != "admin") {
+                _error.value = "Solo administradores pueden mover elementos del plano."
+                return@launch
+            }
+
+            val parkingLot = _selectedParkingLot.value
+
+            if (parkingLot == null) {
+                _error.value = "Selecciona un estacionamiento antes de mover elementos."
+                return@launch
+            }
+
+            if (element.parkingSpotId != null) {
+                val spot = _spots.value.firstOrNull { it.id == element.parkingSpotId }
+
+                if (spot == null) {
+                    _error.value = "No se encontró el cajón asociado a este elemento."
+                    return@launch
+                }
+
+                if (!spot.status.equals("maintenance", ignoreCase = true)) {
+                    _error.value = "Solo puedes mover cajones en mantenimiento."
+                    return@launch
+                }
+            }
+
+            _isAdminMovingLayoutElement.value = true
+            _error.value = null
+            _reservationMessage.value = null
+
+            val result = parkingRepository.adminMoveLayoutElement(
+                elementId = element.id,
+                targetFloorId = targetFloorId,
+                targetRowIndex = targetRowIndex,
+                targetColIndex = targetColIndex
+            )
+
+            result.onSuccess {
+                _reservationMessage.value = "Elemento movido correctamente."
+
+                loadParkingLayoutElements(parkingLot.id)
+                loadSelectedParkingLotSpots()
+                loadDashboard()
+
+            }.onFailure { throwable ->
+                _error.value = throwable.message ?: "No se pudo mover el elemento."
+            }
+
+            _isAdminMovingLayoutElement.value = false
         }
     }
 

@@ -49,6 +49,9 @@ internal fun ParkingLayoutGrid(
     spots: List<ParkingSpot>,
     layoutElements: List<ParkingLayoutElement>,
     activeReservation: Reservation?,
+    movingLayoutElement: ParkingLayoutElement?,
+    isAdminMovingLayoutElement: Boolean,
+    onAdminMoveLayoutElementToCell: (String, Int, Int) -> Unit,
     isLoadingLayout: Boolean,
     onReserveSpotClick: (ParkingSpot) -> Unit,
     onAdminEditSpotClick: (ParkingSpot) -> Unit,
@@ -191,6 +194,9 @@ internal fun ParkingLayoutGrid(
                                     element = element,
                                     spot = spot,
                                     activeReservation = activeReservation,
+                                    movingLayoutElement = movingLayoutElement,
+                                    isAdminMovingLayoutElement = isAdminMovingLayoutElement,
+                                    onAdminMoveLayoutElementToCell = onAdminMoveLayoutElementToCell,
                                     onReserveSpotClick = onReserveSpotClick,
                                     onAdminEditSpotClick = onAdminEditSpotClick,
                                     onAdminCreateSpotAtCell = onAdminCreateSpotAtCell,
@@ -222,6 +228,9 @@ private fun ParkingLayoutCell(
     element: ParkingLayoutElement?,
     spot: ParkingSpot?,
     activeReservation: Reservation?,
+    movingLayoutElement: ParkingLayoutElement?,
+    isAdminMovingLayoutElement: Boolean,
+    onAdminMoveLayoutElementToCell: (String, Int, Int) -> Unit,
     onReserveSpotClick: (ParkingSpot) -> Unit,
     onAdminEditSpotClick: (ParkingSpot) -> Unit,
     onAdminCreateSpotAtCell: (String, Int, Int) -> Unit,
@@ -260,8 +269,14 @@ private fun ParkingLayoutCell(
         row = row,
         col = col,
         canCreate = role == "admin",
+        isMoveTarget = movingLayoutElement != null,
+        isBusy = isAdminMovingLayoutElement,
         onClick = {
-            onAdminCreateSpotAtCell(floorId, row, col)
+            if (movingLayoutElement != null) {
+                onAdminMoveLayoutElementToCell(floorId, row, col)
+            } else {
+                onAdminCreateSpotAtCell(floorId, row, col)
+            }
         }
     )
 }
@@ -334,22 +349,37 @@ private fun EmptyLayoutCell(
     row: Int,
     col: Int,
     canCreate: Boolean,
+    isMoveTarget: Boolean,
+    isBusy: Boolean,
     onClick: () -> Unit
 ) {
+    val enabled = canCreate && !isBusy
+    val borderColor = when {
+        isMoveTarget -> ParkosOrange
+        canCreate -> Color(0xFFFFD8BD)
+        else -> Color(0xFFE1E1E1)
+    }
+
+    val backgroundColor = when {
+        isMoveTarget -> ParkosSoftOrange
+        canCreate -> Color(0xFFFFFBF7)
+        else -> Color(0xFFF7F7F7)
+    }
+
     Box(
         modifier = Modifier
             .size(width = 72.dp, height = 82.dp)
             .background(
-                color = if (canCreate) Color(0xFFFFFBF7) else Color(0xFFF7F7F7),
+                color = backgroundColor,
                 shape = RoundedCornerShape(16.dp)
             )
             .border(
-                width = 1.dp,
-                color = if (canCreate) Color(0xFFFFD8BD) else Color(0xFFE1E1E1),
+                width = if (isMoveTarget) 2.dp else 1.dp,
+                color = borderColor,
                 shape = RoundedCornerShape(16.dp)
             )
             .clickable(
-                enabled = canCreate,
+                enabled = enabled,
                 onClick = onClick
             ),
         contentAlignment = Alignment.Center
@@ -364,7 +394,17 @@ private fun EmptyLayoutCell(
                 fontSize = 8.sp
             )
 
-            if (canCreate) {
+            if (isMoveTarget) {
+                Spacer(modifier = Modifier.height(2.dp))
+
+                Text(
+                    text = "Mover",
+                    color = ParkosOrange,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 9.sp
+                )
+            } else if (canCreate) {
                 Spacer(modifier = Modifier.height(2.dp))
 
                 Text(

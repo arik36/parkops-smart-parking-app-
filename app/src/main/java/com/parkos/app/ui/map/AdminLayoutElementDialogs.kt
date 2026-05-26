@@ -219,17 +219,21 @@ internal fun AdminLayoutCellActionDialog(
 internal fun AdminLayoutElementDialog(
     element: ParkingLayoutElement,
     isDeleting: Boolean,
+    isMoving: Boolean,
     onDismiss: () -> Unit,
+    onMove: () -> Unit,
     onDelete: () -> Unit
 ) {
     var showDeleteConfirm by remember(element.id) {
         mutableStateOf(false)
     }
 
+    val isBusy = isDeleting || isMoving
+
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = {
-                if (!isDeleting) {
+                if (!isBusy) {
                     showDeleteConfirm = false
                 }
             },
@@ -246,7 +250,7 @@ internal fun AdminLayoutElementDialog(
             },
             confirmButton = {
                 Button(
-                    enabled = !isDeleting,
+                    enabled = !isBusy,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFFC94A4A)
                     ),
@@ -260,7 +264,7 @@ internal fun AdminLayoutElementDialog(
             },
             dismissButton = {
                 TextButton(
-                    enabled = !isDeleting,
+                    enabled = !isBusy,
                     onClick = {
                         showDeleteConfirm = false
                     }
@@ -275,7 +279,7 @@ internal fun AdminLayoutElementDialog(
 
     AlertDialog(
         onDismissRequest = {
-            if (!isDeleting) {
+            if (!isBusy) {
                 onDismiss()
             }
         },
@@ -313,6 +317,20 @@ internal fun AdminLayoutElementDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
+                Button(
+                    enabled = !isBusy,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ParkosOrange
+                    ),
+                    onClick = onMove
+                ) {
+                    Text(if (isMoving) "Moviendo..." else "Mover elemento")
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
@@ -344,7 +362,7 @@ internal fun AdminLayoutElementDialog(
                         Spacer(modifier = Modifier.height(10.dp))
 
                         Button(
-                            enabled = !isDeleting,
+                            enabled = !isBusy,
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = Color(0xFFC94A4A)
@@ -361,7 +379,7 @@ internal fun AdminLayoutElementDialog(
         },
         confirmButton = {
             TextButton(
-                enabled = !isDeleting,
+                enabled = !isBusy,
                 onClick = onDismiss
             ) {
                 Text("Cerrar")

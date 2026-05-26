@@ -34,6 +34,13 @@ interface ParkingRepository {
         spotId: String
     ): Result<ParkingSpot>
 
+    suspend fun adminMoveLayoutElement(
+        elementId: String,
+        targetFloorId: String,
+        targetRowIndex: Int,
+        targetColIndex: Int
+    ): Result<ParkingLayoutElement>
+
     suspend fun occupyReservedSpot(
         spotId: String
     ): Result<Unit>

@@ -18,6 +18,7 @@ import com.parkos.app.domain.model.ParkingLayoutElement
 import com.parkos.app.data.remote.dto.AdminDeleteParkingSpotRequest
 import com.parkos.app.data.remote.dto.AdminCreateLayoutElementRequest
 import com.parkos.app.data.remote.dto.AdminDeleteLayoutElementRequest
+import com.parkos.app.data.remote.dto.AdminMoveLayoutElementRequest
 
 
 
@@ -73,6 +74,37 @@ class ParkingRepositoryImpl @Inject constructor(
             }
 
             Result.success(lotsWithAvailability)
+
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    override suspend fun adminMoveLayoutElement(
+        elementId: String,
+        targetFloorId: String,
+        targetRowIndex: Int,
+        targetColIndex: Int
+    ): Result<ParkingLayoutElement> {
+        return try {
+            val response = apiService.adminMoveLayoutElement(
+                AdminMoveLayoutElementRequest(
+                    elementId = elementId,
+                    targetFloorId = targetFloorId,
+                    targetRowIndex = targetRowIndex,
+                    targetColIndex = targetColIndex
+                )
+            )
+
+            if (!response.isSuccessful) {
+                return Result.failure(
+                    Exception("No se pudo mover el elemento del plano: ${response.errorBody()?.string()}")
+                )
+            }
+
+            val movedElement = response.body()
+                ?: return Result.failure(Exception("Supabase no devolvió el elemento movido."))
+
+            Result.success(movedElement.toDomain())
 
         } catch (e: Exception) {
             Result.failure(e)
