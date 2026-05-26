@@ -57,6 +57,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.parkos.app.domain.model.ParkingLot
 import com.parkos.app.ui.theme.ParkosOrange
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
+import com.parkos.app.domain.model.Reservation
 
 @Composable
 internal fun HomeTab(
@@ -65,12 +69,29 @@ internal fun HomeTab(
     userFullName: String?,
     userEmail: String?,
     parkingLots: List<ParkingLot>,
+    selectedParkingLot: ParkingLot?,
+    activeReservation: Reservation?,
+    activeReservationSpotNumber: String?,
+    activeReservationParkingLotName: String?,
     isLoading: Boolean,
     error: String?,
     onRetry: () -> Unit,
+    onGoToMap: () -> Unit,
     onSelectParkingLot: (ParkingLot) -> Unit
 ) {
-    if (role == "admin" || role == "collaborator") {
+    if (role == "admin") {
+        AdminHomeTab(
+            modifier = modifier,
+            parkingLots = parkingLots,
+            isLoading = isLoading,
+            error = error,
+            onRetry = onRetry,
+            onSelectParkingLot = onSelectParkingLot
+        )
+        return
+    }
+
+    if (role == "collaborator") {
         OrganizationHomeTab(
             modifier = modifier,
             role = role,
@@ -115,9 +136,19 @@ internal fun HomeTab(
             }
 
             item {
-                HomeQuickActionsCard(
-                    role = role,
-                    parkingLots = parkingLots
+                ConsumerQuickStatusCard(
+                    parkingLots = parkingLots,
+                    selectedParkingLot = selectedParkingLot,
+                    activeReservation = activeReservation
+                )
+            }
+
+            item {
+                ConsumerReservationPreviewCard(
+                    activeReservation = activeReservation,
+                    activeReservationSpotNumber = activeReservationSpotNumber,
+                    activeReservationParkingLotName = activeReservationParkingLotName,
+                    onGoToMap = onGoToMap
                 )
             }
 
@@ -188,7 +219,7 @@ internal fun HomeTab(
                         if (filteredParkingLots.isEmpty()) {
                             EmptyHomeResultCard()
                         } else {
-                            ParkingLotResultsPanel(
+                            ConsumerParkingLotCards(
                                 parkingLots = filteredParkingLots,
                                 onSelectParkingLot = onSelectParkingLot
                             )
@@ -199,6 +230,673 @@ internal fun HomeTab(
         }
 
         HomeBottomWhiteOverlay()
+    }
+}
+@Composable
+private fun ConsumerQuickStatusCard(
+    parkingLots: List<ParkingLot>,
+    selectedParkingLot: ParkingLot?,
+    activeReservation: Reservation?
+) {
+    val selectedAvailableSpots = selectedParkingLot?.availableSpots
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 42.dp)
+            .padding(top = 8.dp),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = Color(0xFFFFD8BD)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 16.dp, horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            ConsumerStatusMiniItem(
+                modifier = Modifier.weight(1f),
+                title = "Reserva",
+                value = if (activeReservation != null) "Activa" else "Ninguna"
+            )
+
+            HomeVerticalDivider()
+
+            ConsumerStatusMiniItem(
+                modifier = Modifier.weight(1f),
+                title = "Espacios",
+                value = parkingLots.size.toString()
+            )
+
+            HomeVerticalDivider()
+
+            ConsumerStatusMiniItem(
+                modifier = Modifier.weight(1f),
+                title = "Libres aquí",
+                value = selectedAvailableSpots?.toString() ?: "Elige"
+            )
+        }
+    }
+}
+
+@Composable
+private fun ConsumerStatusMiniItem(
+    modifier: Modifier = Modifier,
+    title: String,
+    value: String
+) {
+    Column(
+        modifier = modifier.padding(horizontal = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = value,
+            color = Color.Black,
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.titleMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        Text(
+            text = title,
+            color = Color(0xFF777777),
+            style = MaterialTheme.typography.labelSmall,
+            textAlign = TextAlign.Center,
+            maxLines = 2
+        )
+    }
+}
+
+@Composable
+private fun ConsumerReservationPreviewCard(
+    activeReservation: Reservation?,
+    activeReservationSpotNumber: String?,
+    activeReservationParkingLotName: String?,
+    onGoToMap: () -> Unit
+) {
+    val hasReservation = activeReservation != null
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 34.dp)
+            .padding(top = 14.dp),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (hasReservation) ParkosSoftYellow else Color.White
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (hasReservation) Color(0xFFE8C96A) else Color(0xFFFFD8BD)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Text(
+                text = when {
+                    activeReservation?.status.equals("reserved", ignoreCase = true) -> "Reservación pendiente"
+                    activeReservation?.status.equals("active", ignoreCase = true) -> "Cajón ocupado"
+                    else -> "Listo para estacionarte"
+                },
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleSmall,
+                color = if (hasReservation) Color(0xFF7A5700) else Color.Black
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = if (hasReservation) {
+                    "${activeReservationSpotNumber ?: "Cajón"} · ${activeReservationParkingLotName ?: "ParkOs"}"
+                } else {
+                    "Busca un estacionamiento disponible y reserva un cajón cuando estés por llegar."
+                },
+                color = if (hasReservation) Color(0xFF7A5700) else ParkosMutedText,
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            if (hasReservation) {
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Button(
+                    onClick = onGoToMap,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ParkosOrange
+                    )
+                ) {
+                    Text("Ver en mapa")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConsumerParkingLotCards(
+    parkingLots: List<ParkingLot>,
+    onSelectParkingLot: (ParkingLot) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 28.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        parkingLots.forEach { parkingLot ->
+            ConsumerParkingLotCard(
+                parkingLot = parkingLot,
+                onClick = {
+                    onSelectParkingLot(parkingLot)
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun ConsumerParkingLotCard(
+    parkingLot: ParkingLot,
+    onClick: () -> Unit
+) {
+    val totalSpots = parkingLot.totalSpots.coerceAtLeast(0)
+    val availableSpots = parkingLot.availableSpots.coerceAtLeast(0)
+
+    val availableRate = if (totalSpots > 0) {
+        availableSpots.toFloat() / totalSpots.toFloat()
+    } else {
+        0f
+    }.coerceIn(0f, 1f)
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White.copy(alpha = 0.92f)
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = Color.White.copy(alpha = 0.6f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = parkingLot.name,
+                        color = Color.Black,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = parkingLot.address,
+                        color = ParkosMutedText,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(10.dp))
+
+                Box(
+                    modifier = Modifier
+                        .background(
+                            color = ParkosSoftOrange,
+                            shape = RoundedCornerShape(14.dp)
+                        )
+                        .padding(horizontal = 10.dp, vertical = 7.dp)
+                ) {
+                    Text(
+                        text = "$availableSpots/$totalSpots",
+                        color = ParkosOrange,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(10.dp)
+                    .background(
+                        color = Color(0xFFFFEFE5),
+                        shape = RoundedCornerShape(50)
+                    )
+            ) {
+                if (availableRate > 0f) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(availableRate)
+                            .height(10.dp)
+                            .background(
+                                color = ParkosOrange,
+                                shape = RoundedCornerShape(50)
+                            )
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Button(
+                onClick = onClick,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = ParkosOrange
+                )
+            ) {
+                Text("Ver mapa")
+            }
+        }
+    }
+}
+@Composable
+private fun AdminHomeTab(
+    modifier: Modifier = Modifier,
+    parkingLots: List<ParkingLot>,
+    isLoading: Boolean,
+    error: String?,
+    onRetry: () -> Unit,
+    onSelectParkingLot: (ParkingLot) -> Unit
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(ParkosBackground)
+    ) {
+        HeaderSection(
+            title = "Panel de administración",
+            subtitle = "Control operativo de tu organización"
+        )
+
+        when {
+            isLoading -> {
+                CenteredMessage(
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    CircularProgressIndicator(color = ParkosOrange)
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text("Cargando información...")
+                }
+            }
+
+            error != null -> {
+                CenteredMessage(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 20.dp)
+                ) {
+                    Text(
+                        text = error,
+                        color = MaterialTheme.colorScheme.error,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Button(
+                        onClick = onRetry,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ParkosOrange
+                        )
+                    ) {
+                        Text("Reintentar")
+                    }
+                }
+            }
+
+            parkingLots.isEmpty() -> {
+                CenteredMessage(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 20.dp)
+                ) {
+                    Text(
+                        text = "No hay estacionamientos vinculados a tu organización.",
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+
+            else -> {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    item {
+                        AdminOverviewCard(
+                            parkingLots = parkingLots,
+                            onOpenMainParkingLot = {
+                                onSelectParkingLot(parkingLots.first())
+                            }
+                        )
+                    }
+
+                    item {
+                        AdminOccupancyChartCard(
+                            parkingLots = parkingLots
+                        )
+                    }
+
+                    item {
+                        AdminHelpCard()
+                    }
+
+                    item {
+                        Text(
+                            text = "Estacionamientos de tu organización",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Black
+                        )
+                    }
+
+                    items(parkingLots) { parkingLot ->
+                        OrganizationParkingLotCard(
+                            role = "admin",
+                            parkingLot = parkingLot,
+                            onClick = {
+                                onSelectParkingLot(parkingLot)
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdminOverviewCard(
+    parkingLots: List<ParkingLot>,
+    onOpenMainParkingLot: () -> Unit
+) {
+    val totalLots = parkingLots.size
+    val totalSpots = parkingLots.sumOf { it.totalSpots }
+    val availableSpots = parkingLots.sumOf { it.availableSpots }
+    val unavailableSpots = (totalSpots - availableSpots).coerceAtLeast(0)
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(26.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp)
+        ) {
+            Text(
+                text = "Resumen operativo",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = "Vista rápida del estado general de tus estacionamientos.",
+                color = ParkosMutedText,
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                SummaryMiniCard(
+                    modifier = Modifier.weight(1f),
+                    title = "ParkOs",
+                    value = totalLots.toString()
+                )
+
+                SummaryMiniCard(
+                    modifier = Modifier.weight(1f),
+                    title = "Libres",
+                    value = availableSpots.toString()
+                )
+
+                SummaryMiniCard(
+                    modifier = Modifier.weight(1f),
+                    title = "No libres",
+                    value = unavailableSpots.toString()
+                )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                SummaryMiniCard(
+                    modifier = Modifier.weight(1f),
+                    title = "Cajones",
+                    value = totalSpots.toString()
+                )
+
+                SummaryMiniCard(
+                    modifier = Modifier.weight(1f),
+                    title = "Acceso",
+                    value = "Admin"
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Button(
+                onClick = onOpenMainParkingLot,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = ParkosOrange
+                )
+            ) {
+                Text("Abrir mapa operativo")
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdminOccupancyChartCard(
+    parkingLots: List<ParkingLot>
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(26.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp)
+        ) {
+            Text(
+                text = "Ocupación actual",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = "Comparación de cajones no libres por estacionamiento.",
+                color = ParkosMutedText,
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (parkingLots.isEmpty()) {
+                Text(
+                    text = "No hay estacionamientos para mostrar.",
+                    color = ParkosMutedText,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            } else {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    parkingLots.forEach { parkingLot ->
+                        AdminOccupancyBarRow(
+                            parkingLot = parkingLot
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdminOccupancyBarRow(
+    parkingLot: ParkingLot
+) {
+    val totalSpots = parkingLot.totalSpots.coerceAtLeast(0)
+    val availableSpots = parkingLot.availableSpots.coerceAtLeast(0)
+    val unavailableSpots = (totalSpots - availableSpots).coerceAtLeast(0)
+
+    val occupancyRate = if (totalSpots > 0) {
+        unavailableSpots.toFloat() / totalSpots.toFloat()
+    } else {
+        0f
+    }.coerceIn(0f, 1f)
+
+    val percentage = (occupancyRate * 100).toInt()
+
+    Column(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top
+        ) {
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = parkingLot.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Spacer(modifier = Modifier.height(2.dp))
+
+                Text(
+                    text = if (totalSpots > 0) {
+                        "$unavailableSpots de $totalSpots no libres"
+                    } else {
+                        "Sin cajones registrados"
+                    },
+                    color = ParkosMutedText,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            Text(
+                text = "$percentage%",
+                color = ParkosOrange,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(14.dp)
+                .background(
+                    color = Color(0xFFFFEFE5),
+                    shape = RoundedCornerShape(50)
+                )
+        ) {
+            if (occupancyRate > 0f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(occupancyRate)
+                        .height(14.dp)
+                        .background(
+                            color = ParkosOrange,
+                            shape = RoundedCornerShape(50)
+                        )
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdminHelpCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = ParkosSoftOrange
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = Color(0xFFFFD8BD)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Text(
+                text = "Modo administrador",
+                fontWeight = FontWeight.Bold,
+                color = ParkosOrange,
+                style = MaterialTheme.typography.titleSmall
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = "Puedes editar el plano, crear cajones, mover elementos y poner cajones en mantenimiento. Los administradores no pueden reservar cajones.",
+                color = ParkosOrange,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
     }
 }
 

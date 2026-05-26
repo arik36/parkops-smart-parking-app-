@@ -26,6 +26,9 @@ import com.parkos.app.data.remote.dto.AdminDeleteParkingSpotRequest
 import com.parkos.app.data.remote.dto.AdminCreateLayoutElementRequest
 import com.parkos.app.data.remote.dto.AdminDeleteLayoutElementRequest
 import com.parkos.app.data.remote.dto.AdminMoveLayoutElementRequest
+import com.parkos.app.data.remote.dto.GetReservationHistoryRequest
+import com.parkos.app.data.remote.dto.ReservationHistoryDto
+import com.parkos.app.data.remote.dto.UpdateFullNameRequest
 
 interface ApiService {
 
@@ -44,6 +47,11 @@ interface ApiService {
         @Body request: AdminUpdateParkingSpotRequest
     ): Response<ParkingSpotDto>
 
+    @POST("rest/v1/rpc/update_my_full_name")
+    suspend fun updateMyFullName(
+        @Body request: UpdateFullNameRequest
+    ): Response<UserProfileDto>
+
     @POST("rest/v1/rpc/admin_delete_parking_spot")
     suspend fun adminDeleteParkingSpot(
         @Body request: AdminDeleteParkingSpotRequest
@@ -58,6 +66,11 @@ interface ApiService {
     suspend fun adminCreateLayoutElement(
         @Body request: AdminCreateLayoutElementRequest
     ): Response<ParkingLayoutElementDto>
+
+    @POST("rest/v1/rpc/get_my_reservation_history")
+    suspend fun getMyReservationHistory(
+        @Body request: GetReservationHistoryRequest
+    ): Response<List<ReservationHistoryDto>>
 
     @POST("rest/v1/rpc/admin_delete_layout_element")
     suspend fun adminDeleteLayoutElement(

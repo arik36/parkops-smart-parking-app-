@@ -40,8 +40,15 @@ class AuthRepositoryImpl @Inject constructor(
             )
 
             if (!loginResponse.isSuccessful) {
+                val rawError = loginResponse.errorBody()?.string()
+
                 return Result.failure(
-                    Exception("Login failed: ${loginResponse.errorBody()?.string()}")
+                    Exception(
+                        authLoginErrorMessage(
+                            statusCode = loginResponse.code(),
+                            rawError = rawError
+                        )
+                    )
                 )
             }
 
@@ -144,8 +151,15 @@ class AuthRepositoryImpl @Inject constructor(
             )
 
             if (!registerResponse.isSuccessful) {
+                val rawError = registerResponse.errorBody()?.string()
+
                 return Result.failure(
-                    Exception("Register failed: ${registerResponse.errorBody()?.string()}")
+                    Exception(
+                        authRegisterErrorMessage(
+                            statusCode = registerResponse.code(),
+                            rawError = rawError
+                        )
+                    )
                 )
             }
 
@@ -267,7 +281,91 @@ class AuthRepositoryImpl @Inject constructor(
         tokenManager.clearSession()
         userDao.clearAll()
     }
+    private fun authLoginErrorMessage(
+        statusCode: Int,
+        rawError: String?
+    ): String {
+        val cleanMessage = extractRemoteMessage(rawError)
+        val searchableText = "${rawError.orEmpty()} ${cleanMessage.orEmpty()}".lowercase()
 
+        return when {
+            "invalid login credentials" in searchableText ||
+                    "invalid_credentials" in searchableText ||
+                    statusCode == 400 ||
+                    statusCode == 401 -> {
+                "Correo o contraseña incorrectos."
+            }
+
+            "network" in searchableText ||
+                    "timeout" in searchableText ||
+                    "unable to resolve host" in searchableText -> {
+                "No pudimos conectarnos. Revisa tu internet e inténtalo de nuevo."
+            }
+
+            !cleanMessage.isNullOrBlank() -> {
+                cleanMessage
+            }
+
+            else -> {
+                "No pudimos iniciar sesión. Inténtalo de nuevo."
+            }
+        }
+    }
+
+    private fun authRegisterErrorMessage(
+        statusCode: Int,
+        rawError: String?
+    ): String {
+        val cleanMessage = extractRemoteMessage(rawError)
+        val searchableText = "${rawError.orEmpty()} ${cleanMessage.orEmpty()}".lowercase()
+
+        return when {
+            "already registered" in searchableText ||
+                    "user already registered" in searchableText ||
+                    "already exists" in searchableText -> {
+                "Este correo ya está registrado. Inicia sesión o usa otro correo."
+            }
+
+            "password" in searchableText && "characters" in searchableText -> {
+                "La contraseña debe tener al menos 6 caracteres."
+            }
+
+            "email" in searchableText -> {
+                "Revisa que tu correo sea válido."
+            }
+
+            statusCode == 429 -> {
+                "Has intentado varias veces. Espera un momento e inténtalo otra vez."
+            }
+
+            !cleanMessage.isNullOrBlank() -> {
+                cleanMessage
+            }
+
+            else -> {
+                "No pudimos crear tu cuenta. Inténtalo de nuevo."
+            }
+        }
+    }
+
+    private fun extractRemoteMessage(rawError: String?): String? {
+        if (rawError.isNullOrBlank()) {
+            return null
+        }
+
+        val messageRegex = Regex(
+            pattern = "\"(?:message|msg|error_description)\"\\s*:\\s*\"([^\"]+)\"",
+            option = RegexOption.IGNORE_CASE
+        )
+
+        return messageRegex
+            .find(rawError)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.replace("\\n", " ")
+            ?.replace("\\\"", "\"")
+            ?.trim()
+    }
     private fun validateRole(role: String): String {
         return when (role) {
             "admin", "collaborator", "consumer" -> role

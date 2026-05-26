@@ -65,6 +65,9 @@ fun MapScreen(
     val isAdminDeletingSpot by viewModel.isAdminDeletingSpot.collectAsState()
     val reservationMessage by viewModel.reservationMessage.collectAsState()
     val error by viewModel.error.collectAsState()
+    val reservationHistory by viewModel.reservationHistory.collectAsState()
+    val isLoadingReservationHistory by viewModel.isLoadingReservationHistory.collectAsState()
+    val isUpdatingFullName by viewModel.isUpdatingFullName.collectAsState()
 
 
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -366,12 +369,21 @@ fun MapScreen(
                     .fillMaxSize()
                     .padding(innerPadding),
                 role = userRole,
+                userFullName = userFullName,
+                userEmail = userEmail,
+                parkingLots = parkingLots,
                 selectedParkingLot = selectedParkingLot,
                 activeReservation = activeReservation,
                 activeReservationSpotNumber = activeReservationSpotNumber,
                 activeReservationParkingLotName = activeReservationParkingLotName,
+                reservationHistory = reservationHistory,
+                isLoadingReservationHistory = isLoadingReservationHistory,
                 isOccupying = isOccupying,
                 isReleasing = isReleasing,
+                isUpdatingFullName = isUpdatingFullName,
+                onUpdateFullName = { newName ->
+                    viewModel.updateMyFullName(newName)
+                },
                 onOccupyClick = { showOccupyDialog = true },
                 onReleaseClick = { showReleaseDialog = true },
                 onReservationExpired = {
@@ -388,6 +400,13 @@ fun MapScreen(
                 userFullName = userFullName,
                 userEmail = userEmail,
                 parkingLots = parkingLots,
+                activeReservation = activeReservation,
+                activeReservationSpotNumber = activeReservationSpotNumber,
+                selectedParkingLot = selectedParkingLot,
+                activeReservationParkingLotName = activeReservationParkingLotName,
+                onGoToMap = {
+                    selectedTab = 2
+                },
                 isLoading = isLoadingLots,
                 error = error,
                 onRetry = { viewModel.loadDashboard() },
@@ -477,7 +496,14 @@ fun MapScreen(
             3 -> NotificationsTab(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(innerPadding)
+                    .padding(innerPadding),
+                role = userRole,
+                selectedParkingLot = selectedParkingLot,
+                spots = spots,
+                layoutElements = layoutElements,
+                onOpenMap = {
+                    selectedTab = 2
+                }
             )
         }
     }

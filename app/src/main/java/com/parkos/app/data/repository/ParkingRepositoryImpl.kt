@@ -19,6 +19,9 @@ import com.parkos.app.data.remote.dto.AdminDeleteParkingSpotRequest
 import com.parkos.app.data.remote.dto.AdminCreateLayoutElementRequest
 import com.parkos.app.data.remote.dto.AdminDeleteLayoutElementRequest
 import com.parkos.app.data.remote.dto.AdminMoveLayoutElementRequest
+import com.parkos.app.data.remote.dto.GetReservationHistoryRequest
+import com.parkos.app.domain.model.ReservationHistoryItem
+import com.parkos.app.data.remote.dto.UpdateFullNameRequest
 
 
 
@@ -105,6 +108,63 @@ class ParkingRepositoryImpl @Inject constructor(
                 ?: return Result.failure(Exception("Supabase no devolvió el elemento movido."))
 
             Result.success(movedElement.toDomain())
+
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun updateMyFullName(
+        fullName: String
+    ): Result<String> {
+        return try {
+            val response = apiService.updateMyFullName(
+                UpdateFullNameRequest(
+                    fullName = fullName.trim()
+                )
+            )
+
+            if (!response.isSuccessful) {
+                return Result.failure(
+                    Exception("No se pudo actualizar tu nombre.")
+                )
+            }
+
+            val updatedUser = response.body()
+                ?: return Result.failure(Exception("Supabase no devolvió el usuario actualizado."))
+
+            Result.success(updatedUser.fullName)
+
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    override suspend fun getMyReservationHistory(
+        limit: Int
+    ): Result<List<ReservationHistoryItem>> {
+        return try {
+            val response = apiService.getMyReservationHistory(
+                GetReservationHistoryRequest(
+                    limit = limit
+                )
+            )
+
+            if (!response.isSuccessful) {
+                return Result.failure(
+                    Exception(
+                        friendlyParkingError(
+                            rawError = response.errorBody()?.string(),
+                            fallback = "No se pudo cargar tu historial."
+                        )
+                    )
+                )
+            }
+
+            val history = response.body()
+                ?.map { it.toDomain() }
+                ?: emptyList()
+
+            Result.success(history)
 
         } catch (e: Exception) {
             Result.failure(e)
@@ -404,8 +464,15 @@ class ParkingRepositoryImpl @Inject constructor(
             )
 
             if (!response.isSuccessful) {
+                val rawError = response.errorBody()?.string()
+
                 return Result.failure(
-                    Exception("No se pudo crear el cajón: ${response.errorBody()?.string()}")
+                    Exception(
+                        friendlyParkingError(
+                            rawError = rawError,
+                            fallback = "No se pudo crear el cajón."
+                        )
+                    )
                 )
             }
 
@@ -480,6 +547,67 @@ class ParkingRepositoryImpl @Inject constructor(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+    private fun friendlyParkingError(
+        rawError: String?,
+        fallback: String
+    ): String {
+        val cleanMessage = extractRemoteMessage(rawError)
+        val searchableText = "${rawError.orEmpty()} ${cleanMessage.orEmpty()}".lowercase()
+
+        return when {
+            "duplicate" in searchableText ||
+                    "23505" in searchableText ||
+                    "unique" in searchableText ||
+                    "spot_number" in searchableText ||
+                    "ya existe" in searchableText ||
+                    "identificador" in searchableText -> {
+                "Ya existe un cajón con ese identificador. Usa otro, por ejemplo A-06."
+            }
+
+            "celda" in searchableText && "ocupada" in searchableText -> {
+                "Esa celda ya está ocupada. Selecciona otra posición en el plano."
+            }
+
+            "fila" in searchableText && "rango" in searchableText -> {
+                "La fila seleccionada está fuera del rango permitido."
+            }
+
+            "columna" in searchableText && "rango" in searchableText -> {
+                "La columna seleccionada está fuera del rango permitido."
+            }
+
+            "solo administradores" in searchableText -> {
+                "Solo los administradores pueden realizar esta acción."
+            }
+
+            !cleanMessage.isNullOrBlank() -> {
+                cleanMessage
+            }
+
+            else -> {
+                fallback
+            }
+        }
+    }
+
+    private fun extractRemoteMessage(rawError: String?): String? {
+        if (rawError.isNullOrBlank()) {
+            return null
+        }
+
+        val messageRegex = Regex(
+            pattern = "\"(?:message|msg|details|hint)\"\\s*:\\s*\"([^\"]+)\"",
+            option = RegexOption.IGNORE_CASE
+        )
+
+        return messageRegex
+            .find(rawError)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.replace("\\n", " ")
+            ?.replace("\\\"", "\"")
+            ?.trim()
     }
 
 }

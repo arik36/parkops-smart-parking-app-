@@ -128,6 +128,18 @@ class TokenManager @Inject constructor(
         }
     }
 
+    suspend fun updateUserFullName(
+        fullName: String
+    ) {
+        context.dataStore.edit { prefs ->
+            if (fullName.isBlank()) {
+                prefs.remove(USER_FULL_NAME_KEY)
+            } else {
+                prefs[USER_FULL_NAME_KEY] = fullName
+            }
+        }
+    }
+
     suspend fun clearSession() {
         context.dataStore.edit { preferences ->
             preferences.clear()

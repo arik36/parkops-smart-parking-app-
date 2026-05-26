@@ -5,6 +5,7 @@ import com.parkos.app.domain.model.ParkingSpot
 import com.parkos.app.domain.model.Reservation
 import com.parkos.app.domain.model.ParkingFloor
 import com.parkos.app.domain.model.ParkingLayoutElement
+import com.parkos.app.domain.model.ReservationHistoryItem
 
 
 interface ParkingRepository {
@@ -17,6 +18,14 @@ interface ParkingRepository {
     suspend fun getParkingSpots(
         parkingLotId: String
     ): Result<List<ParkingSpot>>
+
+    suspend fun getMyReservationHistory(
+        limit: Int
+    ): Result<List<ReservationHistoryItem>>
+
+    suspend fun updateMyFullName(
+        fullName: String
+    ): Result<String>
 
     suspend fun adminUpdateParkingSpot(
         spotId: String,

@@ -182,9 +182,10 @@ fun LoginScreen(
                         is LoginUiState.Error -> {
                             Text(
                                 text = (uiState as LoginUiState.Error).message,
-                                color = MaterialTheme.colorScheme.error,
-                                fontSize = 14.sp,
-                                fontFamily = PoppinsFamily
+                                color = Color(0xFF8E1B1B),
+                                fontSize = 13.sp,
+                                fontFamily = PoppinsFamily,
+                                modifier = Modifier.padding(horizontal = 24.dp)
                             )
                         }
 

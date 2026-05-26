@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import com.parkos.app.domain.model.ParkingFloor
 import com.parkos.app.domain.model.ParkingLayoutElement
+import com.parkos.app.domain.model.ReservationHistoryItem
 
 
 @HiltViewModel
@@ -104,6 +105,15 @@ class ParkingViewModel @Inject constructor(
     private val _isAdminDeletingLayoutElement = MutableStateFlow(false)
     val isAdminDeletingLayoutElement = _isAdminDeletingLayoutElement.asStateFlow()
 
+    private val _reservationHistory = MutableStateFlow<List<ReservationHistoryItem>>(emptyList())
+    val reservationHistory = _reservationHistory.asStateFlow()
+
+    private val _isLoadingReservationHistory = MutableStateFlow(false)
+    val isLoadingReservationHistory = _isLoadingReservationHistory.asStateFlow()
+
+    private val _isUpdatingFullName = MutableStateFlow(false)
+    val isUpdatingFullName = _isUpdatingFullName.asStateFlow()
+
     fun loadDashboard() {
         viewModelScope.launch {
             _isLoadingLots.value = true
@@ -120,6 +130,10 @@ class ParkingViewModel @Inject constructor(
             _userEmail.value = email
 
             loadActiveReservationInternal()
+
+            if (role != "admin") {
+                loadReservationHistory()
+            }
 
             val result = parkingRepository.getParkingLots(
                 role = role ?: "consumer",
@@ -148,6 +162,59 @@ class ParkingViewModel @Inject constructor(
             }
 
             _isLoadingLots.value = false
+        }
+    }
+
+    fun loadReservationHistory() {
+        viewModelScope.launch {
+            val role = _userRole.value
+
+            if (role == "admin") {
+                _reservationHistory.value = emptyList()
+                return@launch
+            }
+
+            _isLoadingReservationHistory.value = true
+
+            val result = parkingRepository.getMyReservationHistory(
+                limit = 8
+            )
+
+            result.onSuccess { history ->
+                _reservationHistory.value = history
+            }.onFailure { throwable ->
+                _error.value = throwable.message ?: "No se pudo cargar tu historial."
+            }
+
+            _isLoadingReservationHistory.value = false
+        }
+    }
+
+    fun updateMyFullName(
+        fullName: String
+    ) {
+        viewModelScope.launch {
+            val cleanName = fullName.trim()
+
+            if (cleanName.length < 2) {
+                _error.value = "El nombre debe tener al menos 2 caracteres."
+                return@launch
+            }
+
+            _isUpdatingFullName.value = true
+            _error.value = null
+
+            val result = parkingRepository.updateMyFullName(cleanName)
+
+            result.onSuccess { updatedName ->
+                _userFullName.value = updatedName
+                tokenManager.updateUserFullName(updatedName)
+                _reservationMessage.value = "Nombre actualizado correctamente."
+            }.onFailure { throwable ->
+                _error.value = throwable.message ?: "No se pudo actualizar tu nombre."
+            }
+
+            _isUpdatingFullName.value = false
         }
     }
 
