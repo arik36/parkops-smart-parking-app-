@@ -114,6 +114,9 @@ class ParkingViewModel @Inject constructor(
     private val _isUpdatingFullName = MutableStateFlow(false)
     val isUpdatingFullName = _isUpdatingFullName.asStateFlow()
 
+    private val _staffStatus = MutableStateFlow<String?>(null)
+    val staffStatus = _staffStatus.asStateFlow()
+
     fun loadDashboard() {
         viewModelScope.launch {
             _isLoadingLots.value = true
@@ -123,11 +126,13 @@ class ParkingViewModel @Inject constructor(
             val orgId = tokenManager.getOrgIdFlow().first()
             val fullName = tokenManager.getUserFullNameFlow().first()
             val email = tokenManager.getUserEmailFlow().first()
+            val staffStatus = tokenManager.getStaffStatusFlow().first()
 
             _userRole.value = role
             _userOrgId.value = orgId
             _userFullName.value = fullName
             _userEmail.value = email
+            _staffStatus.value = staffStatus
 
             loadActiveReservationInternal()
 
@@ -352,6 +357,11 @@ class ParkingViewModel @Inject constructor(
             }
             if (_userRole.value == "consumer" && spot.type.equals("staff", ignoreCase = true)) {
                 _error.value = "Este cajón es exclusivo para colaboradores."
+                return@launch
+            }
+
+            if (_userRole.value == "collaborator" && _staffStatus.value != "approved") {
+                _error.value = "Tu acceso como colaborador está pendiente de aprobación."
                 return@launch
             }
 

@@ -28,6 +28,7 @@ class TokenManager @Inject constructor(
         private val USER_FULL_NAME_KEY = stringPreferencesKey("user_full_name")
         private val USER_EMAIL_KEY = stringPreferencesKey("user_email")
         private val SESSION_SAVED_AT_KEY = longPreferencesKey("session_saved_at")
+        private val STAFF_STATUS_KEY = stringPreferencesKey("staff_status")
 
         private const val SESSION_TIMEOUT_MS = 30 * 60 * 1000L
     }
@@ -67,6 +68,11 @@ class TokenManager @Inject constructor(
             preferences[SESSION_SAVED_AT_KEY]
         }
 
+    fun getStaffStatusFlow(): Flow<String?> =
+        context.dataStore.data.map { preferences ->
+            preferences[STAFF_STATUS_KEY]
+        }
+
     suspend fun getToken(): String? =
         getTokenFlow().first()
 
@@ -88,6 +94,9 @@ class TokenManager @Inject constructor(
     suspend fun getSessionSavedAt(): Long? =
         getSessionSavedAtFlow().first()
 
+    suspend fun getStaffStatus(): String? =
+        getStaffStatusFlow().first()
+
     suspend fun isSessionExpired(): Boolean {
         val savedAt = getSessionSavedAt() ?: return true
         val now = System.currentTimeMillis()
@@ -100,7 +109,8 @@ class TokenManager @Inject constructor(
         userType: String,
         orgId: String?,
         fullName: String? = null,
-        email: String? = null
+        email: String? = null,
+        staffStatus: String? = null
     ) {
         context.dataStore.edit { preferences ->
             preferences[TOKEN_KEY] = token
@@ -125,17 +135,23 @@ class TokenManager @Inject constructor(
             } else {
                 preferences.remove(USER_EMAIL_KEY)
             }
+
+            if (!staffStatus.isNullOrBlank()) {
+                preferences[STAFF_STATUS_KEY] = staffStatus
+            } else {
+                preferences.remove(STAFF_STATUS_KEY)
+            }
         }
     }
 
     suspend fun updateUserFullName(
         fullName: String
     ) {
-        context.dataStore.edit { prefs ->
+        context.dataStore.edit { preferences ->
             if (fullName.isBlank()) {
-                prefs.remove(USER_FULL_NAME_KEY)
+                preferences.remove(USER_FULL_NAME_KEY)
             } else {
-                prefs[USER_FULL_NAME_KEY] = fullName
+                preferences[USER_FULL_NAME_KEY] = fullName
             }
         }
     }

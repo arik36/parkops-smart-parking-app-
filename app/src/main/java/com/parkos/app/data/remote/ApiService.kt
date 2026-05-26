@@ -86,7 +86,7 @@ interface ApiService {
     suspend fun getUserProfile(
         @Header("Authorization") authorization: String,
         @Query("id") idFilter: String,
-        @Query("select") select: String = "id,email,full_name,role,org_id"
+        @Query("select") select: String = "id,email,full_name,role,org_id,staff_status"
     ): Response<List<UserProfileDto>>
 
     @GET("rest/v1/parking_layout_elements")

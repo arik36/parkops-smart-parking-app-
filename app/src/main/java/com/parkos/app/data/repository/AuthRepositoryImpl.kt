@@ -81,7 +81,8 @@ class AuthRepositoryImpl @Inject constructor(
                 userType = role,
                 orgId = profile.orgId,
                 fullName = profile.fullName,
-                email = profile.email
+                email = profile.email,
+                staffStatus = profile.staffStatus
             )
 
             val userEntity = UserEntity(
@@ -206,6 +207,11 @@ class AuthRepositoryImpl @Inject constructor(
             } else {
                 "collaborator"
             }
+            val staffStatus = if (cleanOrgId == null) {
+                null
+            } else {
+                "pending"
+            }
 
             val createProfileResponse = apiService.createUserProfile(
                 authorization = "Bearer $accessToken",
@@ -214,7 +220,8 @@ class AuthRepositoryImpl @Inject constructor(
                     email = registeredUserEmail,
                     fullName = cleanName,
                     role = role,
-                    orgId = cleanOrgId
+                    orgId = cleanOrgId,
+                    staffStatus = staffStatus
                 )
             )
 
@@ -236,7 +243,8 @@ class AuthRepositoryImpl @Inject constructor(
                 userType = safeRole,
                 orgId = profile.orgId,
                 fullName = profile.fullName,
-                email = profile.email
+                email = profile.email,
+                staffStatus = profile.staffStatus
             )
 
             val userEntity = UserEntity(

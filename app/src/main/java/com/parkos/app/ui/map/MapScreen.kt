@@ -501,8 +501,14 @@ fun MapScreen(
                 selectedParkingLot = selectedParkingLot,
                 spots = spots,
                 layoutElements = layoutElements,
+                activeReservation = activeReservation,
+                activeReservationSpotNumber = activeReservationSpotNumber,
+                activeReservationParkingLotName = activeReservationParkingLotName,
                 onOpenMap = {
                     selectedTab = 2
+                },
+                onGoToParkingLots = {
+                    selectedTab = 1
                 }
             )
         }
