@@ -57,10 +57,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.parkos.app.domain.model.ParkingLot
 import com.parkos.app.ui.theme.ParkosOrange
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.width
 import com.parkos.app.domain.model.Reservation
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
+import com.parkos.app.domain.model.StaffMember
+import com.parkos.app.domain.model.IncidentReport
+
 
 @Composable
 internal fun HomeTab(
@@ -73,32 +76,50 @@ internal fun HomeTab(
     activeReservation: Reservation?,
     activeReservationSpotNumber: String?,
     activeReservationParkingLotName: String?,
+    orgStaffMembers: List<StaffMember>,
+    isLoadingOrgStaffMembers: Boolean,
+    isRevokingStaffAccess: Boolean,
     isLoading: Boolean,
     error: String?,
     onRetry: () -> Unit,
     onGoToMap: () -> Unit,
+    staffStatus: String?,
+    incidentReports: List<IncidentReport>,
+    isLoadingIncidentReports: Boolean,
+    isCreatingIncidentReport: Boolean,
+    onCreateIncidentReportClick: () -> Unit,
+    onRevokeStaffAccess: (StaffMember) -> Unit,
     onSelectParkingLot: (ParkingLot) -> Unit
-) {
+){
     if (role == "admin") {
         AdminHomeTab(
             modifier = modifier,
             parkingLots = parkingLots,
+            orgStaffMembers = orgStaffMembers,
+            isLoadingOrgStaffMembers = isLoadingOrgStaffMembers,
+            isRevokingStaffAccess = isRevokingStaffAccess,
             isLoading = isLoading,
             error = error,
             onRetry = onRetry,
+            onRevokeStaffAccess = onRevokeStaffAccess,
             onSelectParkingLot = onSelectParkingLot
         )
         return
     }
 
     if (role == "collaborator") {
-        OrganizationHomeTab(
+        StaffHomeTab(
             modifier = modifier,
-            role = role,
+            staffStatus = staffStatus,
             parkingLots = parkingLots,
+            selectedParkingLot = selectedParkingLot,
+            incidentReports = incidentReports,
+            isLoadingIncidentReports = isLoadingIncidentReports,
+            isCreatingIncidentReport = isCreatingIncidentReport,
             isLoading = isLoading,
             error = error,
             onRetry = onRetry,
+            onCreateIncidentReportClick = onCreateIncidentReportClick,
             onSelectParkingLot = onSelectParkingLot
         )
         return
@@ -523,9 +544,13 @@ private fun ConsumerParkingLotCard(
 private fun AdminHomeTab(
     modifier: Modifier = Modifier,
     parkingLots: List<ParkingLot>,
+    orgStaffMembers: List<StaffMember>,
+    isLoadingOrgStaffMembers: Boolean,
+    isRevokingStaffAccess: Boolean,
     isLoading: Boolean,
     error: String?,
     onRetry: () -> Unit,
+    onRevokeStaffAccess: (StaffMember) -> Unit,
     onSelectParkingLot: (ParkingLot) -> Unit
 ) {
     Column(
@@ -607,6 +632,15 @@ private fun AdminHomeTab(
                     item {
                         AdminOccupancyChartCard(
                             parkingLots = parkingLots
+                        )
+                    }
+
+                    item {
+                        AdminStaffMembersCard(
+                            staffMembers = orgStaffMembers,
+                            isLoading = isLoadingOrgStaffMembers,
+                            isRevoking = isRevokingStaffAccess,
+                            onRevokeStaffAccess = onRevokeStaffAccess
                         )
                     }
 
@@ -782,7 +816,225 @@ private fun AdminOccupancyChartCard(
         }
     }
 }
+@Composable
+private fun AdminStaffMembersCard(
+    staffMembers: List<StaffMember>,
+    isLoading: Boolean,
+    isRevoking: Boolean,
+    onRevokeStaffAccess: (StaffMember) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(26.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp)
+        ) {
+            Text(
+                text = "Personal staff activo",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
 
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = "Colaboradores aprobados para operar dentro de tu organización.",
+                color = ParkosMutedText,
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            when {
+                isLoading -> {
+                    Text(
+                        text = "Cargando personal staff...",
+                        color = ParkosMutedText,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                staffMembers.isEmpty() -> {
+                    Text(
+                        text = "Todavía no hay colaboradores aprobados.",
+                        color = ParkosMutedText,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                else -> {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        staffMembers.forEach { member ->
+                            AdminStaffMemberItem(
+                                member = member,
+                                isRevoking = isRevoking,
+                                onRevokeStaffAccess = {
+                                    onRevokeStaffAccess(member)
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdminStaffMemberItem(
+    member: StaffMember,
+    isRevoking: Boolean,
+    onRevokeStaffAccess: () -> Unit
+) {
+    var showConfirmDialog by remember(member.userId) {
+        mutableStateOf(false)
+    }
+
+    if (showConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!isRevoking) {
+                    showConfirmDialog = false
+                }
+            },
+            title = {
+                Text(
+                    text = "Quitar acceso staff",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = "¿Quieres quitar el acceso staff a ${member.fullName}? Su cuenta no será eliminada; quedará como usuario normal."
+                )
+            },
+            confirmButton = {
+                Button(
+                    enabled = !isRevoking,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFC94A4A)
+                    ),
+                    onClick = {
+                        onRevokeStaffAccess()
+                        showConfirmDialog = false
+                    }
+                ) {
+                    Text(if (isRevoking) "Quitando..." else "Quitar acceso")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !isRevoking,
+                    onClick = {
+                        showConfirmDialog = false
+                    }
+                ) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFFFFFBF7)
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = ParkosBorder
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp)
+        ) {
+            Text(
+                text = member.fullName.ifBlank { "Usuario sin nombre" },
+                color = Color.Black,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.height(3.dp))
+
+            Text(
+                text = member.email,
+                color = ParkosMutedText,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Box(
+                modifier = Modifier
+                    .background(
+                        color = ParkosSoftOrange,
+                        shape = RoundedCornerShape(14.dp)
+                    )
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    text = "Staff aprobado",
+                    color = ParkosOrange,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = if (member.parkingLotCount > 1) {
+                    "Aplica a ${member.parkingLotCount} estacionamientos:"
+                } else {
+                    "Aplica a:"
+                },
+                color = ParkosMutedText,
+                style = MaterialTheme.typography.labelMedium
+            )
+
+            Spacer(modifier = Modifier.height(3.dp))
+
+            Text(
+                text = member.parkingLotNames,
+                color = Color.Black,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            OutlinedButton(
+                onClick = {
+                    showConfirmDialog = true
+                },
+                enabled = !isRevoking,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, Color(0xFFC94A4A))
+            ) {
+                Text(
+                    text = if (isRevoking) "Quitando acceso..." else "Quitar acceso staff",
+                    color = Color(0xFFC94A4A)
+                )
+            }
+        }
+    }
+}
 @Composable
 private fun AdminOccupancyBarRow(
     parkingLot: ParkingLot
@@ -1786,5 +2038,396 @@ private fun HomeStateCard(
                 }
             }
         }
+    }
+}
+@Composable
+private fun StaffHomeTab(
+    modifier: Modifier = Modifier,
+    staffStatus: String?,
+    parkingLots: List<ParkingLot>,
+    selectedParkingLot: ParkingLot?,
+    incidentReports: List<IncidentReport>,
+    isLoadingIncidentReports: Boolean,
+    isCreatingIncidentReport: Boolean,
+    isLoading: Boolean,
+    error: String?,
+    onRetry: () -> Unit,
+    onCreateIncidentReportClick: () -> Unit,
+    onSelectParkingLot: (ParkingLot) -> Unit
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(ParkosBackground)
+    ) {
+        HeaderSection(
+            title = "Inicio staff",
+            subtitle = "Herramientas para colaboradores"
+        )
+
+        when {
+            isLoading -> {
+                CenteredMessage(
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    CircularProgressIndicator(color = ParkosOrange)
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text("Cargando información...")
+                }
+            }
+
+            error != null -> {
+                CenteredMessage(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 20.dp)
+                ) {
+                    Text(
+                        text = error,
+                        color = MaterialTheme.colorScheme.error,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Button(
+                        onClick = onRetry,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ParkosOrange
+                        )
+                    ) {
+                        Text("Reintentar")
+                    }
+                }
+            }
+
+            else -> {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    item {
+                        StaffStatusCard(
+                            staffStatus = staffStatus,
+                            selectedParkingLot = selectedParkingLot
+                        )
+                    }
+
+                    item {
+                        StaffIncidentReportActionCard(
+                            staffStatus = staffStatus,
+                            selectedParkingLot = selectedParkingLot,
+                            isCreatingIncidentReport = isCreatingIncidentReport,
+                            onCreateIncidentReportClick = onCreateIncidentReportClick
+                        )
+                    }
+
+                    item {
+                        StaffRecentReportsCard(
+                            reports = incidentReports,
+                            isLoading = isLoadingIncidentReports
+                        )
+                    }
+
+                    item {
+                        Text(
+                            text = "Estacionamientos de tu organización",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Black
+                        )
+                    }
+
+                    if (parkingLots.isEmpty()) {
+                        item {
+                            EmptyHomeResultCard()
+                        }
+                    } else {
+                        items(parkingLots) { parkingLot ->
+                            OrganizationParkingLotCard(
+                                role = "collaborator",
+                                parkingLot = parkingLot,
+                                onClick = {
+                                    onSelectParkingLot(parkingLot)
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StaffStatusCard(
+    staffStatus: String?,
+    selectedParkingLot: ParkingLot?
+) {
+    val isApproved = staffStatus == "approved"
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(26.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isApproved) ParkosSoftGreen else ParkosSoftYellow
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (isApproved) Color(0xFFB7D8BA) else Color(0xFFE8C96A)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp)
+        ) {
+            Text(
+                text = when (staffStatus) {
+                    "approved" -> "Acceso staff aprobado"
+                    "pending" -> "Solicitud staff pendiente"
+                    "rejected" -> "Solicitud staff rechazada"
+                    "revoked" -> "Acceso staff revocado"
+                    else -> "Estado staff no disponible"
+                },
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleMedium,
+                color = if (isApproved) Color(0xFF1B5E20) else Color(0xFF7A5700)
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = when (staffStatus) {
+                    "approved" -> "Puedes reservar cajones staff y crear reportes de incidentes."
+                    "pending" -> "Un administrador debe aprobar tu solicitud antes de usar funciones staff."
+                    "rejected" -> "Tu solicitud fue rechazada. Puedes seguir usando ParkOs como usuario normal."
+                    "revoked" -> "Tu acceso staff fue retirado. Puedes seguir usando ParkOs como usuario normal."
+                    else -> "No se pudo determinar tu estado staff."
+                },
+                color = if (isApproved) Color(0xFF1B5E20) else Color(0xFF7A5700),
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            ProfileInfoLine(
+                title = "Estacionamiento activo",
+                value = selectedParkingLot?.name ?: "Ninguno seleccionado"
+            )
+        }
+    }
+}
+
+@Composable
+private fun StaffIncidentReportActionCard(
+    staffStatus: String?,
+    selectedParkingLot: ParkingLot?,
+    isCreatingIncidentReport: Boolean,
+    onCreateIncidentReportClick: () -> Unit
+) {
+    val canCreateReport = staffStatus == "approved" && selectedParkingLot != null
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(26.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp)
+        ) {
+            Text(
+                text = "Reporte de incidente",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = if (selectedParkingLot == null) {
+                    "Selecciona un estacionamiento para crear reportes relacionados con ese lugar."
+                } else {
+                    "Crea un reporte preventivo e informativo para compartirlo con un superior."
+                },
+                color = ParkosMutedText,
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Button(
+                onClick = onCreateIncidentReportClick,
+                enabled = canCreateReport && !isCreatingIncidentReport,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = ParkosOrange
+                )
+            ) {
+                Text(
+                    when {
+                        isCreatingIncidentReport -> "Guardando..."
+                        selectedParkingLot == null -> "Selecciona estacionamiento"
+                        else -> "Crear reporte"
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StaffRecentReportsCard(
+    reports: List<IncidentReport>,
+    isLoading: Boolean
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(26.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp)
+        ) {
+            Text(
+                text = "Mis reportes recientes",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = "Últimos reportes creados desde tu cuenta staff.",
+                color = ParkosMutedText,
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            when {
+                isLoading -> {
+                    Text(
+                        text = "Cargando reportes...",
+                        color = ParkosMutedText,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                reports.isEmpty() -> {
+                    Text(
+                        text = "Aún no has creado reportes.",
+                        color = ParkosMutedText,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                else -> {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        reports.take(5).forEach { report ->
+                            StaffReportMiniItem(
+                                report = report
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StaffReportMiniItem(
+    report: IncidentReport
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFFFFFBF7)
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = ParkosBorder
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp)
+        ) {
+            Text(
+                text = report.reportNumber,
+                color = Color.Black,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = "${incidentTypeToSpanish(report.incidentType)} · ${report.vehiclePlate}",
+                color = ParkosMutedText,
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            if (!report.spotNumber.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(3.dp))
+
+                Text(
+                    text = "Casilla: ${report.spotNumber}",
+                    color = ParkosMutedText,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileInfoLine(
+    title: String,
+    value: String
+) {
+    Column {
+        Text(
+            text = title,
+            color = ParkosMutedText,
+            style = MaterialTheme.typography.labelMedium
+        )
+
+        Spacer(modifier = Modifier.height(3.dp))
+
+        Text(
+            text = value,
+            color = Color.Black,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+private fun incidentTypeToSpanish(type: String): String {
+    return when (type) {
+        "robo" -> "Robo"
+        "danio_vehiculo" -> "Daño a vehículo"
+        "danio_infraestructura" -> "Daño a infraestructura"
+        "agresion" -> "Agresión"
+        "actividad_sospechosa" -> "Actividad sospechosa"
+        "vehiculo_mal_estacionado" -> "Vehículo mal estacionado"
+        "otro" -> "Otro"
+        else -> type
     }
 }

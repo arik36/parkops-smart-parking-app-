@@ -29,6 +29,13 @@ import com.parkos.app.data.remote.dto.AdminMoveLayoutElementRequest
 import com.parkos.app.data.remote.dto.GetReservationHistoryRequest
 import com.parkos.app.data.remote.dto.ReservationHistoryDto
 import com.parkos.app.data.remote.dto.UpdateFullNameRequest
+import com.parkos.app.data.remote.dto.ResolveStaffRequestRequest
+import com.parkos.app.data.remote.dto.StaffRequestDto
+import com.parkos.app.data.remote.dto.RevokeStaffAccessRequest
+import com.parkos.app.data.remote.dto.StaffMemberDto
+import com.parkos.app.data.remote.dto.CreateIncidentReportRequest
+import com.parkos.app.data.remote.dto.GetIncidentReportsRequest
+import com.parkos.app.data.remote.dto.IncidentReportDto
 
 interface ApiService {
 
@@ -81,6 +88,32 @@ interface ApiService {
     suspend fun adminMoveLayoutElement(
         @Body request: AdminMoveLayoutElementRequest
     ): Response<ParkingLayoutElementDto>
+
+    @POST("rest/v1/rpc/admin_get_pending_staff_requests")
+    suspend fun adminGetPendingStaffRequests(): Response<List<StaffRequestDto>>
+
+    @POST("rest/v1/rpc/admin_resolve_staff_request")
+    suspend fun adminResolveStaffRequest(
+        @Body request: ResolveStaffRequestRequest
+    ): Response<UserProfileDto>
+
+    @POST("rest/v1/rpc/admin_get_org_staff_members")
+    suspend fun adminGetOrgStaffMembers(): Response<List<StaffMemberDto>>
+
+    @POST("rest/v1/rpc/admin_revoke_staff_access")
+    suspend fun adminRevokeStaffAccess(
+        @Body request: RevokeStaffAccessRequest
+    ): Response<UserProfileDto>
+
+    @POST("rest/v1/rpc/staff_create_incident_report")
+    suspend fun staffCreateIncidentReport(
+        @Body request: CreateIncidentReportRequest
+    ): Response<IncidentReportDto>
+
+    @POST("rest/v1/rpc/staff_get_my_incident_reports")
+    suspend fun staffGetMyIncidentReports(
+        @Body request: GetIncidentReportsRequest
+    ): Response<List<IncidentReportDto>>
 
     @GET("rest/v1/users")
     suspend fun getUserProfile(

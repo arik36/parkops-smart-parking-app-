@@ -22,6 +22,13 @@ import com.parkos.app.data.remote.dto.AdminMoveLayoutElementRequest
 import com.parkos.app.data.remote.dto.GetReservationHistoryRequest
 import com.parkos.app.domain.model.ReservationHistoryItem
 import com.parkos.app.data.remote.dto.UpdateFullNameRequest
+import com.parkos.app.data.remote.dto.ResolveStaffRequestRequest
+import com.parkos.app.domain.model.StaffRequest
+import com.parkos.app.data.remote.dto.RevokeStaffAccessRequest
+import com.parkos.app.domain.model.StaffMember
+import com.parkos.app.data.remote.dto.CreateIncidentReportRequest
+import com.parkos.app.data.remote.dto.GetIncidentReportsRequest
+import com.parkos.app.domain.model.IncidentReport
 
 
 
@@ -590,6 +597,60 @@ class ParkingRepositoryImpl @Inject constructor(
             }
         }
     }
+    private fun friendlyIncidentReportError(
+        rawError: String?,
+        fallback: String
+    ): String {
+        val cleanMessage = extractRemoteMessage(rawError)
+        val searchableText = "${rawError.orEmpty()} ${cleanMessage.orEmpty()}".lowercase()
+
+        return when {
+            "casilla indicada no existe" in searchableText ||
+                    "no existe en este estacionamiento" in searchableText -> {
+                "La casilla indicada no existe en este estacionamiento. Revisa el identificador, por ejemplo A-03."
+            }
+
+            "placa debe tener" in searchableText -> {
+                "La placa debe tener al menos 3 caracteres."
+            }
+
+            "placa es demasiado larga" in searchableText -> {
+                "La placa es demasiado larga."
+            }
+
+            "tipo de incidente inválido" in searchableText -> {
+                "Selecciona un tipo de incidente válido."
+            }
+
+            "describe el tipo de incidente" in searchableText -> {
+                "Describe el incidente cuando selecciones Otro."
+            }
+
+            "detalles son demasiado largos" in searchableText -> {
+                "Los detalles son demasiado largos. Intenta resumir el reporte."
+            }
+
+            "solo personal staff" in searchableText -> {
+                "Solo personal staff aprobado puede crear reportes."
+            }
+
+            "acceso staff" in searchableText && "aprobado" in searchableText -> {
+                "Tu acceso staff aún no está aprobado."
+            }
+
+            "estacionamiento no pertenece" in searchableText -> {
+                "No puedes crear reportes para este estacionamiento."
+            }
+
+            !cleanMessage.isNullOrBlank() -> {
+                cleanMessage
+            }
+
+            else -> {
+                fallback
+            }
+        }
+    }
 
     private fun extractRemoteMessage(rawError: String?): String? {
         if (rawError.isNullOrBlank()) {
@@ -608,6 +669,186 @@ class ParkingRepositoryImpl @Inject constructor(
             ?.replace("\\n", " ")
             ?.replace("\\\"", "\"")
             ?.trim()
+    }
+    override suspend fun adminGetPendingStaffRequests(): Result<List<StaffRequest>> {
+        return try {
+            val response = apiService.adminGetPendingStaffRequests()
+
+            if (!response.isSuccessful) {
+                return Result.failure(
+                    Exception(
+                        friendlyParkingError(
+                            rawError = response.errorBody()?.string(),
+                            fallback = "No se pudieron cargar las solicitudes staff."
+                        )
+                    )
+                )
+            }
+
+            val requests = response.body()
+                ?.map { it.toDomain() }
+                ?: emptyList()
+
+            Result.success(requests)
+
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun adminResolveStaffRequest(
+        userId: String,
+        action: String
+    ): Result<Unit> {
+        return try {
+            val response = apiService.adminResolveStaffRequest(
+                ResolveStaffRequestRequest(
+                    userId = userId,
+                    action = action
+                )
+            )
+
+            if (!response.isSuccessful) {
+                return Result.failure(
+                    Exception(
+                        friendlyParkingError(
+                            rawError = response.errorBody()?.string(),
+                            fallback = "No se pudo resolver la solicitud staff."
+                        )
+                    )
+                )
+            }
+
+            Result.success(Unit)
+
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    override suspend fun adminGetOrgStaffMembers(): Result<List<StaffMember>> {
+        return try {
+            val response = apiService.adminGetOrgStaffMembers()
+
+            if (!response.isSuccessful) {
+                return Result.failure(
+                    Exception(
+                        friendlyParkingError(
+                            rawError = response.errorBody()?.string(),
+                            fallback = "No se pudo cargar el personal staff."
+                        )
+                    )
+                )
+            }
+
+            val staffMembers = response.body()
+                ?.map { it.toDomain() }
+                ?: emptyList()
+
+            Result.success(staffMembers)
+
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun adminRevokeStaffAccess(
+        userId: String
+    ): Result<Unit> {
+        return try {
+            val response = apiService.adminRevokeStaffAccess(
+                RevokeStaffAccessRequest(
+                    userId = userId
+                )
+            )
+
+            if (!response.isSuccessful) {
+                return Result.failure(
+                    Exception(
+                        friendlyParkingError(
+                            rawError = response.errorBody()?.string(),
+                            fallback = "No se pudo quitar el acceso staff."
+                        )
+                    )
+                )
+            }
+
+            Result.success(Unit)
+
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    override suspend fun staffCreateIncidentReport(
+        parkingLotId: String,
+        spotNumber: String?,
+        vehiclePlate: String,
+        incidentType: String,
+        customIncidentType: String?,
+        details: String?
+    ): Result<IncidentReport> {
+        return try {
+            val response = apiService.staffCreateIncidentReport(
+                CreateIncidentReportRequest(
+                    parkingLotId = parkingLotId,
+                    spotNumber = spotNumber.orEmpty().trim().uppercase(),
+                    vehiclePlate = vehiclePlate.trim().uppercase(),
+                    incidentType = incidentType,
+                    customIncidentType = customIncidentType.orEmpty().trim(),
+                    details = details.orEmpty().trim()
+                )
+            )
+
+            if (!response.isSuccessful) {
+                return Result.failure(
+                    Exception(
+                        friendlyIncidentReportError(
+                            rawError = response.errorBody()?.string(),
+                            fallback = "No se pudo crear el reporte."
+                        )
+                    )
+                )
+            }
+
+            val report = response.body()
+                ?: return Result.failure(Exception("Supabase no devolvió el reporte creado."))
+
+            Result.success(report.toDomain())
+
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun staffGetMyIncidentReports(
+        limit: Int
+    ): Result<List<IncidentReport>> {
+        return try {
+            val response = apiService.staffGetMyIncidentReports(
+                GetIncidentReportsRequest(
+                    limit = limit
+                )
+            )
+
+            if (!response.isSuccessful) {
+                return Result.failure(
+                    Exception(
+                        friendlyParkingError(
+                            rawError = response.errorBody()?.string(),
+                            fallback = "No se pudieron cargar tus reportes."
+                        )
+                    )
+                )
+            }
+
+            val reports = response.body()
+                ?.map { it.toDomain() }
+                ?: emptyList()
+
+            Result.success(reports)
+
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
 }

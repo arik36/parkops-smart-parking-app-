@@ -6,7 +6,9 @@ import com.parkos.app.domain.model.Reservation
 import com.parkos.app.domain.model.ParkingFloor
 import com.parkos.app.domain.model.ParkingLayoutElement
 import com.parkos.app.domain.model.ReservationHistoryItem
-
+import com.parkos.app.domain.model.StaffRequest
+import com.parkos.app.domain.model.StaffMember
+import com.parkos.app.domain.model.IncidentReport
 
 interface ParkingRepository {
 
@@ -50,6 +52,19 @@ interface ParkingRepository {
         targetColIndex: Int
     ): Result<ParkingLayoutElement>
 
+    suspend fun adminGetPendingStaffRequests(): Result<List<StaffRequest>>
+
+    suspend fun adminResolveStaffRequest(
+        userId: String,
+        action: String
+    ): Result<Unit>
+
+    suspend fun adminGetOrgStaffMembers(): Result<List<StaffMember>>
+
+    suspend fun adminRevokeStaffAccess(
+        userId: String
+    ): Result<Unit>
+
     suspend fun occupyReservedSpot(
         spotId: String
     ): Result<Unit>
@@ -68,6 +83,19 @@ interface ParkingRepository {
         widthM: Double?,
         heightM: Double?
     ): Result<ParkingSpot>
+
+    suspend fun staffCreateIncidentReport(
+        parkingLotId: String,
+        spotNumber: String?,
+        vehiclePlate: String,
+        incidentType: String,
+        customIncidentType: String?,
+        details: String?
+    ): Result<IncidentReport>
+
+    suspend fun staffGetMyIncidentReports(
+        limit: Int
+    ): Result<List<IncidentReport>>
 
     suspend fun adminCreateLayoutElement(
         parkingLotId: String,

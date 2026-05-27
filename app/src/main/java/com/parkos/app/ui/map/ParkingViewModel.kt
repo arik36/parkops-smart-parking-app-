@@ -16,7 +16,9 @@ import javax.inject.Inject
 import com.parkos.app.domain.model.ParkingFloor
 import com.parkos.app.domain.model.ParkingLayoutElement
 import com.parkos.app.domain.model.ReservationHistoryItem
-
+import com.parkos.app.domain.model.StaffRequest
+import com.parkos.app.domain.model.StaffMember
+import com.parkos.app.domain.model.IncidentReport
 
 @HiltViewModel
 class ParkingViewModel @Inject constructor(
@@ -117,6 +119,36 @@ class ParkingViewModel @Inject constructor(
     private val _staffStatus = MutableStateFlow<String?>(null)
     val staffStatus = _staffStatus.asStateFlow()
 
+    private val _pendingStaffRequests = MutableStateFlow<List<StaffRequest>>(emptyList())
+    val pendingStaffRequests = _pendingStaffRequests.asStateFlow()
+
+    private val _isLoadingPendingStaffRequests = MutableStateFlow(false)
+    val isLoadingPendingStaffRequests = _isLoadingPendingStaffRequests.asStateFlow()
+
+    private val _isResolvingStaffRequest = MutableStateFlow(false)
+    val isResolvingStaffRequest = _isResolvingStaffRequest.asStateFlow()
+
+    private val _orgStaffMembers = MutableStateFlow<List<StaffMember>>(emptyList())
+    val orgStaffMembers = _orgStaffMembers.asStateFlow()
+
+    private val _isLoadingOrgStaffMembers = MutableStateFlow(false)
+    val isLoadingOrgStaffMembers = _isLoadingOrgStaffMembers.asStateFlow()
+
+    private val _isRevokingStaffAccess = MutableStateFlow(false)
+    val isRevokingStaffAccess = _isRevokingStaffAccess.asStateFlow()
+
+    private val _incidentReports = MutableStateFlow<List<IncidentReport>>(emptyList())
+    val incidentReports = _incidentReports.asStateFlow()
+
+    private val _isLoadingIncidentReports = MutableStateFlow(false)
+    val isLoadingIncidentReports = _isLoadingIncidentReports.asStateFlow()
+
+    private val _isCreatingIncidentReport = MutableStateFlow(false)
+    val isCreatingIncidentReport = _isCreatingIncidentReport.asStateFlow()
+
+    private val _lastCreatedIncidentReport = MutableStateFlow<IncidentReport?>(null)
+    val lastCreatedIncidentReport = _lastCreatedIncidentReport.asStateFlow()
+
     fun loadDashboard() {
         viewModelScope.launch {
             _isLoadingLots.value = true
@@ -134,10 +166,19 @@ class ParkingViewModel @Inject constructor(
             _userEmail.value = email
             _staffStatus.value = staffStatus
 
+            if (role == "admin") {
+                loadPendingStaffRequests()
+                loadOrgStaffMembers()
+            }
+
             loadActiveReservationInternal()
 
             if (role != "admin") {
                 loadReservationHistory()
+            }
+
+            if (role == "collaborator" && staffStatus == "approved") {
+                loadMyIncidentReports()
             }
 
             val result = parkingRepository.getParkingLots(
@@ -759,5 +800,211 @@ class ParkingViewModel @Inject constructor(
 
     fun clearReservationMessage() {
         _reservationMessage.value = null
+    }
+    fun loadPendingStaffRequests() {
+        viewModelScope.launch {
+            if (_userRole.value != "admin") {
+                _pendingStaffRequests.value = emptyList()
+                return@launch
+            }
+
+            _isLoadingPendingStaffRequests.value = true
+
+            val result = parkingRepository.adminGetPendingStaffRequests()
+
+            result.onSuccess { requests ->
+                _pendingStaffRequests.value = requests
+            }.onFailure { throwable ->
+                _error.value = throwable.message ?: "No se pudieron cargar las solicitudes staff."
+            }
+
+            _isLoadingPendingStaffRequests.value = false
+        }
+    }
+
+    fun resolveStaffRequest(
+        request: StaffRequest,
+        action: String
+    ) {
+        viewModelScope.launch {
+            if (_userRole.value != "admin") {
+                _error.value = "Solo administradores pueden resolver solicitudes staff."
+                return@launch
+            }
+
+            if (action !in listOf("approve", "reject")) {
+                _error.value = "Acción inválida."
+                return@launch
+            }
+
+            _isResolvingStaffRequest.value = true
+            _error.value = null
+            _reservationMessage.value = null
+
+            val result = parkingRepository.adminResolveStaffRequest(
+                userId = request.userId,
+                action = action
+            )
+
+            result.onSuccess {
+                _reservationMessage.value = if (action == "approve") {
+                    "${request.fullName} fue aprobado como colaborador."
+                } else {
+                    "${request.fullName} fue rechazado como colaborador."
+                }
+
+                loadPendingStaffRequests()
+                loadOrgStaffMembers()
+                loadDashboard()
+
+            }.onFailure { throwable ->
+                _error.value = throwable.message ?: "No se pudo resolver la solicitud staff."
+            }
+
+            _isResolvingStaffRequest.value = false
+        }
+    }
+    fun loadOrgStaffMembers() {
+        viewModelScope.launch {
+            if (_userRole.value != "admin") {
+                _orgStaffMembers.value = emptyList()
+                return@launch
+            }
+
+            _isLoadingOrgStaffMembers.value = true
+
+            val result = parkingRepository.adminGetOrgStaffMembers()
+
+            result.onSuccess { members ->
+                _orgStaffMembers.value = members
+            }.onFailure { throwable ->
+                _error.value = throwable.message ?: "No se pudo cargar el personal staff."
+            }
+
+            _isLoadingOrgStaffMembers.value = false
+        }
+    }
+
+    fun revokeStaffAccess(
+        member: StaffMember
+    ) {
+        viewModelScope.launch {
+            if (_userRole.value != "admin") {
+                _error.value = "Solo administradores pueden quitar acceso staff."
+                return@launch
+            }
+
+            _isRevokingStaffAccess.value = true
+            _error.value = null
+            _reservationMessage.value = null
+
+            val result = parkingRepository.adminRevokeStaffAccess(
+                userId = member.userId
+            )
+
+            result.onSuccess {
+                _reservationMessage.value =
+                    "${member.fullName} ya no tiene acceso staff."
+
+                loadOrgStaffMembers()
+                loadPendingStaffRequests()
+                loadDashboard()
+
+            }.onFailure { throwable ->
+                _error.value = throwable.message ?: "No se pudo quitar el acceso staff."
+            }
+
+            _isRevokingStaffAccess.value = false
+        }
+    }
+    fun loadMyIncidentReports() {
+        viewModelScope.launch {
+            val isApprovedStaff =
+                _userRole.value == "collaborator" && _staffStatus.value == "approved"
+
+            if (!isApprovedStaff) {
+                _incidentReports.value = emptyList()
+                return@launch
+            }
+
+            _isLoadingIncidentReports.value = true
+
+            val result = parkingRepository.staffGetMyIncidentReports(
+                limit = 10
+            )
+
+            result.onSuccess { reports ->
+                _incidentReports.value = reports
+            }.onFailure { throwable ->
+                _error.value = throwable.message ?: "No se pudieron cargar tus reportes."
+            }
+
+            _isLoadingIncidentReports.value = false
+        }
+    }
+
+    fun staffCreateIncidentReport(
+        spotNumber: String?,
+        vehiclePlate: String,
+        incidentType: String,
+        customIncidentType: String?,
+        details: String?
+    ) {
+        viewModelScope.launch {
+            val isApprovedStaff =
+                _userRole.value == "collaborator" && _staffStatus.value == "approved"
+
+            if (!isApprovedStaff) {
+                _error.value = "Tu acceso staff debe estar aprobado para crear reportes."
+                return@launch
+            }
+
+            val parkingLot = _selectedParkingLot.value
+
+            if (parkingLot == null) {
+                _error.value = "Selecciona un estacionamiento antes de crear un reporte."
+                return@launch
+            }
+
+            val cleanPlate = vehiclePlate.trim().uppercase()
+
+            if (cleanPlate.length < 3) {
+                _error.value = "La placa debe tener al menos 3 caracteres."
+                return@launch
+            }
+
+            if (incidentType == "otro" && customIncidentType.isNullOrBlank()) {
+                _error.value = "Describe el incidente cuando selecciones Otro."
+                return@launch
+            }
+
+            _isCreatingIncidentReport.value = true
+            _error.value = null
+            _reservationMessage.value = null
+            _lastCreatedIncidentReport.value = null
+
+            val result = parkingRepository.staffCreateIncidentReport(
+                parkingLotId = parkingLot.id,
+                spotNumber = spotNumber,
+                vehiclePlate = cleanPlate,
+                incidentType = incidentType,
+                customIncidentType = customIncidentType,
+                details = details
+            )
+
+            result.onSuccess { report ->
+                _lastCreatedIncidentReport.value = report
+                _reservationMessage.value = "Reporte ${report.reportNumber} creado correctamente."
+                loadMyIncidentReports()
+            }.onFailure { throwable ->
+                _error.value = throwable.message ?: "No se pudo crear el reporte."
+            }
+
+            _isCreatingIncidentReport.value = false
+        }
+    }
+
+    fun clearLastCreatedIncidentReport() {
+        _lastCreatedIncidentReport.value = null
     }
 }

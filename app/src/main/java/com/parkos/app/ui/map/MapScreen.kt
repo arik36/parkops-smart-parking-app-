@@ -1,6 +1,5 @@
 package com.parkos.app.ui.map
 
-
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -29,9 +28,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import com.parkos.app.domain.model.ParkingLayoutElement
 import com.parkos.app.domain.model.ParkingSpot
 import com.parkos.app.ui.theme.ParkosOrange
-import com.parkos.app.domain.model.ParkingLayoutElement
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 
 
 @Composable
@@ -40,47 +41,76 @@ fun MapScreen(
     onLogout: () -> Unit
 ) {
     val userRole by viewModel.userRole.collectAsState()
+    val staffStatus by viewModel.staffStatus.collectAsState()
     val userFullName by viewModel.userFullName.collectAsState()
     val userEmail by viewModel.userEmail.collectAsState()
+
     val parkingLots by viewModel.parkingLots.collectAsState()
     val selectedParkingLot by viewModel.selectedParkingLot.collectAsState()
     val spots by viewModel.spots.collectAsState()
+
     val activeReservation by viewModel.activeReservation.collectAsState()
-    val parkingFloors by viewModel.parkingFloors.collectAsState()
-    val layoutElements by viewModel.layoutElements.collectAsState()
-    val isLoadingLayout by viewModel.isLoadingLayout.collectAsState()
-    val isLoadingFloors by viewModel.isLoadingFloors.collectAsState()
-    val isAdminCreatingLayoutElement by viewModel.isAdminCreatingLayoutElement.collectAsState()
-    val isAdminDeletingLayoutElement by viewModel.isAdminDeletingLayoutElement.collectAsState()
-    val isAdminMovingLayoutElement by viewModel.isAdminMovingLayoutElement.collectAsState()
-    val isAdminCreatingSpot by viewModel.isAdminCreatingSpot.collectAsState()
     val activeReservationSpotNumber by viewModel.activeReservationSpotNumber.collectAsState()
     val activeReservationParkingLotName by viewModel.activeReservationParkingLotName.collectAsState()
+
+    val parkingFloors by viewModel.parkingFloors.collectAsState()
+    val layoutElements by viewModel.layoutElements.collectAsState()
+
     val isLoadingLots by viewModel.isLoadingLots.collectAsState()
     val isLoadingSpots by viewModel.isLoadingSpots.collectAsState()
+    val isLoadingFloors by viewModel.isLoadingFloors.collectAsState()
+    val isLoadingLayout by viewModel.isLoadingLayout.collectAsState()
+
     val isReserving by viewModel.isReserving.collectAsState()
     val isOccupying by viewModel.isOccupying.collectAsState()
     val isReleasing by viewModel.isReleasing.collectAsState()
+
     val isAdminUpdatingSpot by viewModel.isAdminUpdatingSpot.collectAsState()
     val isAdminDeletingSpot by viewModel.isAdminDeletingSpot.collectAsState()
+    val isAdminCreatingSpot by viewModel.isAdminCreatingSpot.collectAsState()
+
+    val isAdminCreatingLayoutElement by viewModel.isAdminCreatingLayoutElement.collectAsState()
+    val isAdminDeletingLayoutElement by viewModel.isAdminDeletingLayoutElement.collectAsState()
+    val isAdminMovingLayoutElement by viewModel.isAdminMovingLayoutElement.collectAsState()
+
     val reservationMessage by viewModel.reservationMessage.collectAsState()
     val error by viewModel.error.collectAsState()
+
     val reservationHistory by viewModel.reservationHistory.collectAsState()
     val isLoadingReservationHistory by viewModel.isLoadingReservationHistory.collectAsState()
     val isUpdatingFullName by viewModel.isUpdatingFullName.collectAsState()
 
+    val pendingStaffRequests by viewModel.pendingStaffRequests.collectAsState()
+    val isLoadingPendingStaffRequests by viewModel.isLoadingPendingStaffRequests.collectAsState()
+    val isResolvingStaffRequest by viewModel.isResolvingStaffRequest.collectAsState()
+
+    val orgStaffMembers by viewModel.orgStaffMembers.collectAsState()
+    val isLoadingOrgStaffMembers by viewModel.isLoadingOrgStaffMembers.collectAsState()
+    val isRevokingStaffAccess by viewModel.isRevokingStaffAccess.collectAsState()
+
+    val incidentReports by viewModel.incidentReports.collectAsState()
+    val isLoadingIncidentReports by viewModel.isLoadingIncidentReports.collectAsState()
+    val isCreatingIncidentReport by viewModel.isCreatingIncidentReport.collectAsState()
 
     var selectedTab by remember { mutableIntStateOf(0) }
+
     var spotToReserve by remember { mutableStateOf<ParkingSpot?>(null) }
     var showOccupyDialog by remember { mutableStateOf(false) }
     var showReleaseDialog by remember { mutableStateOf(false) }
+
     var spotToEditByAdmin by remember { mutableStateOf<ParkingSpot?>(null) }
+
     var showAdminCreateSpotDialog by remember { mutableStateOf(false) }
     var adminCreateSpotTarget by remember { mutableStateOf<AdminCreateSpotTarget?>(null) }
+
     var adminLayoutCellTarget by remember { mutableStateOf<AdminLayoutCellTarget?>(null) }
     var layoutElementToEdit by remember { mutableStateOf<ParkingLayoutElement?>(null) }
     var layoutElementToMove by remember { mutableStateOf<ParkingLayoutElement?>(null) }
 
+    var showStaffIncidentReportDialog by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    val lastCreatedIncidentReport by viewModel.lastCreatedIncidentReport.collectAsState()
 
     val tabs = listOf(
         BottomTab("Perfil", Icons.Default.Person),
@@ -91,6 +121,57 @@ fun MapScreen(
 
     LaunchedEffect(Unit) {
         viewModel.loadDashboard()
+    }
+
+    LaunchedEffect(lastCreatedIncidentReport) {
+        val report = lastCreatedIncidentReport ?: return@LaunchedEffect
+
+        try {
+            val pdfFile = IncidentReportPdfGenerator.createIncidentReportPdf(
+                context = context,
+                report = report,
+                staffName = userFullName,
+                staffEmail = userEmail
+            )
+
+            IncidentReportPdfGenerator.shareIncidentReportPdf(
+                context = context,
+                pdfFile = pdfFile
+            )
+        } catch (e: Exception) {
+            Toast.makeText(
+                context,
+                "El reporte se guardó, pero no se pudo generar el PDF.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+
+        viewModel.clearLastCreatedIncidentReport()
+    }
+
+    if (showStaffIncidentReportDialog) {
+        StaffIncidentReportDialog(
+            selectedParkingLot = selectedParkingLot,
+            staffName = userFullName,
+            staffEmail = userEmail,
+            isCreating = isCreatingIncidentReport,
+            onDismiss = {
+                if (!isCreatingIncidentReport) {
+                    showStaffIncidentReportDialog = false
+                }
+            },
+            onSubmit = { spotNumber, vehiclePlate, incidentType, customIncidentType, details ->
+                viewModel.staffCreateIncidentReport(
+                    spotNumber = spotNumber,
+                    vehiclePlate = vehiclePlate,
+                    incidentType = incidentType,
+                    customIncidentType = customIncidentType,
+                    details = details
+                )
+
+                showStaffIncidentReportDialog = false
+            }
+        )
     }
 
     spotToReserve?.let { spot ->
@@ -132,84 +213,6 @@ fun MapScreen(
             }
         )
     }
-    adminLayoutCellTarget?.let { target ->
-        AdminLayoutCellActionDialog(
-            target = target,
-            isCreatingElement = isAdminCreatingLayoutElement,
-            onDismiss = {
-                if (!isAdminCreatingLayoutElement) {
-                    adminLayoutCellTarget = null
-                }
-            },
-            onCreateSpot = {
-                adminCreateSpotTarget = AdminCreateSpotTarget(
-                    floorId = target.floorId,
-                    rowIndex = target.rowIndex,
-                    colIndex = target.colIndex
-                )
-                adminLayoutCellTarget = null
-                showAdminCreateSpotDialog = true
-            },
-            onCreateElement = { elementType, label, description ->
-                viewModel.adminCreateLayoutElement(
-                    floorId = target.floorId,
-                    elementType = elementType,
-                    rowIndex = target.rowIndex,
-                    colIndex = target.colIndex,
-                    label = label,
-                    description = description
-                )
-                adminLayoutCellTarget = null
-            }
-        )
-    }
-
-    layoutElementToEdit?.let { element ->
-        AdminLayoutElementDialog(
-            element = element,
-            isDeleting = isAdminDeletingLayoutElement,
-            isMoving = isAdminMovingLayoutElement,
-            onDismiss = {
-                if (!isAdminDeletingLayoutElement && !isAdminMovingLayoutElement) {
-                    layoutElementToEdit = null
-                }
-            },
-            onMove = {
-                layoutElementToMove = element
-                layoutElementToEdit = null
-            },
-            onDelete = {
-                viewModel.adminDeleteLayoutElement(element)
-                layoutElementToEdit = null
-            }
-        )
-    }
-    if (showAdminCreateSpotDialog) {
-        AdminCreateParkingSpotDialog(
-            floors = parkingFloors,
-            initialTarget = adminCreateSpotTarget,
-            isSaving = isAdminCreatingSpot,
-            onDismiss = {
-                if (!isAdminCreatingSpot) {
-                    showAdminCreateSpotDialog = false
-                    adminCreateSpotTarget = null
-                }
-            },
-            onCreate = { floorId, spotNumber, type, rowIndex, colIndex, widthM, heightM ->
-                viewModel.adminCreateParkingSpot(
-                    floorId = floorId,
-                    spotNumber = spotNumber,
-                    type = type,
-                    rowIndex = rowIndex,
-                    colIndex = colIndex,
-                    widthM = widthM,
-                    heightM = heightM
-                )
-                showAdminCreateSpotDialog = false
-                adminCreateSpotTarget = null
-            }
-        )
-    }
 
     if (showOccupyDialog) {
         AlertDialog(
@@ -234,6 +237,7 @@ fun MapScreen(
                         activeReservation?.let { reservation ->
                             viewModel.occupyReservedSpot(reservation.spotId)
                         }
+
                         showOccupyDialog = false
                     }
                 ) {
@@ -292,6 +296,90 @@ fun MapScreen(
             }
         )
     }
+
+    adminLayoutCellTarget?.let { target ->
+        AdminLayoutCellActionDialog(
+            target = target,
+            isCreatingElement = isAdminCreatingLayoutElement,
+            onDismiss = {
+                if (!isAdminCreatingLayoutElement) {
+                    adminLayoutCellTarget = null
+                }
+            },
+            onCreateSpot = {
+                adminCreateSpotTarget = AdminCreateSpotTarget(
+                    floorId = target.floorId,
+                    rowIndex = target.rowIndex,
+                    colIndex = target.colIndex
+                )
+
+                adminLayoutCellTarget = null
+                showAdminCreateSpotDialog = true
+            },
+            onCreateElement = { elementType, label, description ->
+                viewModel.adminCreateLayoutElement(
+                    floorId = target.floorId,
+                    elementType = elementType,
+                    rowIndex = target.rowIndex,
+                    colIndex = target.colIndex,
+                    label = label,
+                    description = description
+                )
+
+                adminLayoutCellTarget = null
+            }
+        )
+    }
+
+    layoutElementToEdit?.let { element ->
+        AdminLayoutElementDialog(
+            element = element,
+            isDeleting = isAdminDeletingLayoutElement,
+            isMoving = isAdminMovingLayoutElement,
+            onDismiss = {
+                if (!isAdminDeletingLayoutElement && !isAdminMovingLayoutElement) {
+                    layoutElementToEdit = null
+                }
+            },
+            onMove = {
+                layoutElementToMove = element
+                layoutElementToEdit = null
+            },
+            onDelete = {
+                viewModel.adminDeleteLayoutElement(element)
+                layoutElementToEdit = null
+            }
+        )
+    }
+
+    if (showAdminCreateSpotDialog) {
+        AdminCreateParkingSpotDialog(
+            floors = parkingFloors,
+            initialTarget = adminCreateSpotTarget,
+            isSaving = isAdminCreatingSpot,
+            onDismiss = {
+                if (!isAdminCreatingSpot) {
+                    showAdminCreateSpotDialog = false
+                    adminCreateSpotTarget = null
+                }
+            },
+            onCreate = { floorId, spotNumber, type, rowIndex, colIndex, widthM, heightM ->
+                viewModel.adminCreateParkingSpot(
+                    floorId = floorId,
+                    spotNumber = spotNumber,
+                    type = type,
+                    rowIndex = rowIndex,
+                    colIndex = colIndex,
+                    widthM = widthM,
+                    heightM = heightM
+                )
+
+                showAdminCreateSpotDialog = false
+                adminCreateSpotTarget = null
+            }
+        )
+    }
+
     spotToEditByAdmin?.let { spot ->
         AdminEditParkingSpotDialog(
             spot = spot,
@@ -301,7 +389,10 @@ fun MapScreen(
             canMove = spot.status.equals("maintenance", ignoreCase = true) &&
                     layoutElements.any { it.parkingSpotId == spot.id },
             onDismiss = {
-                if (!isAdminUpdatingSpot && !isAdminDeletingSpot && !isAdminMovingLayoutElement) {
+                if (!isAdminUpdatingSpot &&
+                    !isAdminDeletingSpot &&
+                    !isAdminMovingLayoutElement
+                ) {
                     spotToEditByAdmin = null
                 }
             },
@@ -311,6 +402,7 @@ fun MapScreen(
                     newStatus = newStatus,
                     newType = newType
                 )
+
                 spotToEditByAdmin = null
             },
             onMove = {
@@ -341,7 +433,9 @@ fun MapScreen(
                 tabs.forEachIndexed { index, tab ->
                     NavigationBarItem(
                         selected = selectedTab == index,
-                        onClick = { selectedTab = index },
+                        onClick = {
+                            selectedTab = index
+                        },
                         icon = {
                             Icon(
                                 imageVector = tab.icon,
@@ -378,14 +472,18 @@ fun MapScreen(
                 activeReservationParkingLotName = activeReservationParkingLotName,
                 reservationHistory = reservationHistory,
                 isLoadingReservationHistory = isLoadingReservationHistory,
+                isUpdatingFullName = isUpdatingFullName,
                 isOccupying = isOccupying,
                 isReleasing = isReleasing,
-                isUpdatingFullName = isUpdatingFullName,
                 onUpdateFullName = { newName ->
                     viewModel.updateMyFullName(newName)
                 },
-                onOccupyClick = { showOccupyDialog = true },
-                onReleaseClick = { showReleaseDialog = true },
+                onOccupyClick = {
+                    showOccupyDialog = true
+                },
+                onReleaseClick = {
+                    showReleaseDialog = true
+                },
                 onReservationExpired = {
                     viewModel.refreshAfterReservationExpiration()
                 },
@@ -400,16 +498,31 @@ fun MapScreen(
                 userFullName = userFullName,
                 userEmail = userEmail,
                 parkingLots = parkingLots,
+                selectedParkingLot = selectedParkingLot,
                 activeReservation = activeReservation,
                 activeReservationSpotNumber = activeReservationSpotNumber,
-                selectedParkingLot = selectedParkingLot,
                 activeReservationParkingLotName = activeReservationParkingLotName,
+                orgStaffMembers = orgStaffMembers,
+                isLoadingOrgStaffMembers = isLoadingOrgStaffMembers,
+                isRevokingStaffAccess = isRevokingStaffAccess,
+                isLoading = isLoadingLots,
+                error = error,
+                onRetry = {
+                    viewModel.loadDashboard()
+                },
                 onGoToMap = {
                     selectedTab = 2
                 },
-                isLoading = isLoadingLots,
-                error = error,
-                onRetry = { viewModel.loadDashboard() },
+                staffStatus = staffStatus,
+                incidentReports = incidentReports,
+                isLoadingIncidentReports = isLoadingIncidentReports,
+                isCreatingIncidentReport = isCreatingIncidentReport,
+                onCreateIncidentReportClick = {
+                    showStaffIncidentReportDialog = true
+                },
+                onRevokeStaffAccess = { member ->
+                    viewModel.revokeStaffAccess(member)
+                },
                 onSelectParkingLot = { lot ->
                     viewModel.selectParkingLot(lot)
                     selectedTab = 2
@@ -439,26 +552,13 @@ fun MapScreen(
                 reservationMessage = reservationMessage,
                 movingLayoutElement = layoutElementToMove,
                 isAdminMovingLayoutElement = isAdminMovingLayoutElement,
-                onCancelMoveLayoutElement = {
-                    if (!isAdminMovingLayoutElement) {
-                        layoutElementToMove = null
-                    }
-                },
-                onAdminMoveLayoutElementToCell = { floorId, rowIndex, colIndex ->
-                    layoutElementToMove?.let { element ->
-                        viewModel.adminMoveLayoutElement(
-                            element = element,
-                            targetFloorId = floorId,
-                            targetRowIndex = rowIndex,
-                            targetColIndex = colIndex
-                        )
-                    }
-
-                    layoutElementToMove = null
-                },
                 error = error,
-                onRetry = { viewModel.loadSelectedParkingLotSpots() },
-                onGoToParkingLots = { selectedTab = 1 },
+                onRetry = {
+                    viewModel.loadSelectedParkingLotSpots()
+                },
+                onGoToParkingLots = {
+                    selectedTab = 1
+                },
                 onReserveSpotClick = { spot ->
                     spotToReserve = spot
                 },
@@ -478,6 +578,23 @@ fun MapScreen(
                 },
                 onAdminLayoutElementClick = { element ->
                     layoutElementToEdit = element
+                },
+                onCancelMoveLayoutElement = {
+                    if (!isAdminMovingLayoutElement) {
+                        layoutElementToMove = null
+                    }
+                },
+                onAdminMoveLayoutElementToCell = { floorId, rowIndex, colIndex ->
+                    layoutElementToMove?.let { element ->
+                        viewModel.adminMoveLayoutElement(
+                            element = element,
+                            targetFloorId = floorId,
+                            targetRowIndex = rowIndex,
+                            targetColIndex = colIndex
+                        )
+                    }
+
+                    layoutElementToMove = null
                 },
                 onOccupyClick = {
                     showOccupyDialog = true
@@ -504,11 +621,20 @@ fun MapScreen(
                 activeReservation = activeReservation,
                 activeReservationSpotNumber = activeReservationSpotNumber,
                 activeReservationParkingLotName = activeReservationParkingLotName,
+                pendingStaffRequests = pendingStaffRequests,
+                isLoadingPendingStaffRequests = isLoadingPendingStaffRequests,
+                isResolvingStaffRequest = isResolvingStaffRequest,
                 onOpenMap = {
                     selectedTab = 2
                 },
                 onGoToParkingLots = {
                     selectedTab = 1
+                },
+                onResolveStaffRequest = { request, action ->
+                    viewModel.resolveStaffRequest(
+                        request = request,
+                        action = action
+                    )
                 }
             )
         }

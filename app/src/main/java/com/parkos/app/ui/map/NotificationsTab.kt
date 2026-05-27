@@ -1,8 +1,10 @@
 package com.parkos.app.ui.map
 
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -12,13 +14,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -30,8 +32,9 @@ import androidx.compose.ui.unit.dp
 import com.parkos.app.domain.model.ParkingLayoutElement
 import com.parkos.app.domain.model.ParkingLot
 import com.parkos.app.domain.model.ParkingSpot
-import com.parkos.app.ui.theme.ParkosOrange
 import com.parkos.app.domain.model.Reservation
+import com.parkos.app.domain.model.StaffRequest
+import com.parkos.app.ui.theme.*
 
 @Composable
 internal fun NotificationsTab(
@@ -43,8 +46,12 @@ internal fun NotificationsTab(
     activeReservation: Reservation?,
     activeReservationSpotNumber: String?,
     activeReservationParkingLotName: String?,
+    pendingStaffRequests: List<StaffRequest>,
+    isLoadingPendingStaffRequests: Boolean,
+    isResolvingStaffRequest: Boolean,
     onOpenMap: () -> Unit,
-    onGoToParkingLots: () -> Unit
+    onGoToParkingLots: () -> Unit,
+    onResolveStaffRequest: (StaffRequest, String) -> Unit
 ) {
     if (role == "admin") {
         AdminNotificationsTab(
@@ -52,6 +59,10 @@ internal fun NotificationsTab(
             selectedParkingLot = selectedParkingLot,
             spots = spots,
             layoutElements = layoutElements,
+            pendingStaffRequests = pendingStaffRequests,
+            isLoadingPendingStaffRequests = isLoadingPendingStaffRequests,
+            isResolvingStaffRequest = isResolvingStaffRequest,
+            onResolveStaffRequest = onResolveStaffRequest,
             onOpenMap = onOpenMap
         )
         return
@@ -75,8 +86,12 @@ private fun AdminNotificationsTab(
     selectedParkingLot: ParkingLot?,
     spots: List<ParkingSpot>,
     layoutElements: List<ParkingLayoutElement>,
-    onOpenMap: () -> Unit
-) {
+    pendingStaffRequests: List<StaffRequest>,
+    isLoadingPendingStaffRequests: Boolean,
+    isResolvingStaffRequest: Boolean,
+    onOpenMap: () -> Unit,
+    onResolveStaffRequest: (StaffRequest, String) -> Unit
+){
     val availableSpots = spots.count { it.status.equals("available", ignoreCase = true) }
     val reservedSpots = spots.count { it.status.equals("reserved", ignoreCase = true) }
     val occupiedSpots = spots.count { it.status.equals("occupied", ignoreCase = true) }
@@ -103,6 +118,14 @@ private fun AdminNotificationsTab(
                     reservedSpots = reservedSpots,
                     occupiedSpots = occupiedSpots,
                     maintenanceCount = maintenanceSpots.size
+                )
+            }
+            item {
+                AdminPendingStaffRequestsCard(
+                    requests = pendingStaffRequests,
+                    isLoading = isLoadingPendingStaffRequests,
+                    isResolving = isResolvingStaffRequest,
+                    onResolveStaffRequest = onResolveStaffRequest
                 )
             }
 
@@ -191,6 +214,178 @@ private fun AdminStatusOverviewCard(
         }
     }
 }
+
+@Composable
+private fun AdminPendingStaffRequestsCard(
+    requests: List<StaffRequest>,
+    isLoading: Boolean,
+    isResolving: Boolean,
+    onResolveStaffRequest: (StaffRequest, String) -> Unit
+) {
+    val hasRequests = requests.isNotEmpty()
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (hasRequests) ParkosSoftYellow else Color.White
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (hasRequests) Color(0xFFE8C96A) else ParkosBorder
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp)
+        ) {
+            Text(
+                text = "Solicitudes staff",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = if (hasRequests) Color(0xFF7A5700) else Color.Black
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            when {
+                isLoading -> {
+                    Text(
+                        text = "Cargando solicitudes pendientes...",
+                        color = ParkosMutedText,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                requests.isEmpty() -> {
+                    Text(
+                        text = "No hay solicitudes staff pendientes por ahora.",
+                        color = ParkosMutedText,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                else -> {
+                    Text(
+                        text = "Revisa quién solicitó acceso como colaborador antes de aprobarlo.",
+                        color = Color(0xFF7A5700),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        requests.forEach { request ->
+                            AdminStaffRequestItem(
+                                request = request,
+                                isResolving = isResolving,
+                                onApprove = {
+                                    onResolveStaffRequest(request, "approve")
+                                },
+                                onReject = {
+                                    onResolveStaffRequest(request, "reject")
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdminStaffRequestItem(
+    request: StaffRequest,
+    isResolving: Boolean,
+    onApprove: () -> Unit,
+    onReject: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White.copy(alpha = 0.85f)
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = Color(0xFFE8C96A)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp)
+        ) {
+            Text(
+                text = request.fullName.ifBlank { "Usuario sin nombre" },
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.height(3.dp))
+
+            Text(
+                text = request.email,
+                color = ParkosMutedText,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Box(
+                modifier = Modifier
+                    .background(
+                        color = ParkosSoftOrange,
+                        shape = RoundedCornerShape(14.dp)
+                    )
+                    .padding(horizontal = 10.dp, vertical = 5.dp)
+            ) {
+                Text(
+                    text = "Pendiente de aprobación",
+                    color = ParkosOrange,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Button(
+                    onClick = onApprove,
+                    enabled = !isResolving,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ParkosOrange
+                    )
+                ) {
+                    Text(if (isResolving) "..." else "Aprobar")
+                }
+
+                OutlinedButton(
+                    onClick = onReject,
+                    enabled = !isResolving,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, Color(0xFFC94A4A))
+                ) {
+                    Text(
+                        text = "Rechazar",
+                        color = Color(0xFFC94A4A)
+                    )
+                }
+            }
+        }
+    }
+}
+
 
 @Composable
 private fun AdminMaintenanceAlertsCard(
