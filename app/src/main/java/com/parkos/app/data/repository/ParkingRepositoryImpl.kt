@@ -1,46 +1,54 @@
 package com.parkos.app.data.repository
 
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import com.parkos.app.core.OfflineModeManager
+import com.parkos.app.data.local.dao.OfflineCacheDao
+import com.parkos.app.data.local.entities.OfflineCacheEntity
 import com.parkos.app.data.remote.ApiService
+import com.parkos.app.data.remote.dto.AdminCreateLayoutElementRequest
+import com.parkos.app.data.remote.dto.AdminCreateParkingSpotRequest
+import com.parkos.app.data.remote.dto.AdminDeleteLayoutElementRequest
+import com.parkos.app.data.remote.dto.AdminDeleteParkingSpotRequest
+import com.parkos.app.data.remote.dto.AdminMoveLayoutElementRequest
+import com.parkos.app.data.remote.dto.AdminUpdateParkingSpotRequest
+import com.parkos.app.data.remote.dto.CreateIncidentReportRequest
+import com.parkos.app.data.remote.dto.GetIncidentReportsRequest
+import com.parkos.app.data.remote.dto.GetReservationHistoryRequest
 import com.parkos.app.data.remote.dto.ParkingLotDto
 import com.parkos.app.data.remote.dto.ParkingSpotDto
 import com.parkos.app.data.remote.dto.ReservationDto
 import com.parkos.app.data.remote.dto.ReserveSpotRequest
+import com.parkos.app.data.remote.dto.ResolveStaffRequestRequest
+import com.parkos.app.data.remote.dto.RevokeStaffAccessRequest
+import com.parkos.app.data.remote.dto.UpdateFullNameRequest
+import com.parkos.app.domain.model.IncidentReport
+import com.parkos.app.domain.model.ParkingFloor
+import com.parkos.app.domain.model.ParkingLayoutElement
 import com.parkos.app.domain.model.ParkingLot
 import com.parkos.app.domain.model.ParkingSpot
 import com.parkos.app.domain.model.Reservation
+import com.parkos.app.domain.model.ReservationHistoryItem
+import com.parkos.app.domain.model.StaffMember
+import com.parkos.app.domain.model.StaffRequest
 import com.parkos.app.domain.repository.ParkingRepository
-import com.parkos.app.data.remote.dto.AdminUpdateParkingSpotRequest
-import com.parkos.app.data.remote.dto.AdminCreateParkingSpotRequest
-import com.parkos.app.domain.model.ParkingFloor
 import javax.inject.Inject
 import javax.inject.Singleton
-import com.parkos.app.domain.model.ParkingLayoutElement
-import com.parkos.app.data.remote.dto.AdminDeleteParkingSpotRequest
-import com.parkos.app.data.remote.dto.AdminCreateLayoutElementRequest
-import com.parkos.app.data.remote.dto.AdminDeleteLayoutElementRequest
-import com.parkos.app.data.remote.dto.AdminMoveLayoutElementRequest
-import com.parkos.app.data.remote.dto.GetReservationHistoryRequest
-import com.parkos.app.domain.model.ReservationHistoryItem
-import com.parkos.app.data.remote.dto.UpdateFullNameRequest
-import com.parkos.app.data.remote.dto.ResolveStaffRequestRequest
-import com.parkos.app.domain.model.StaffRequest
-import com.parkos.app.data.remote.dto.RevokeStaffAccessRequest
-import com.parkos.app.domain.model.StaffMember
-import com.parkos.app.data.remote.dto.CreateIncidentReportRequest
-import com.parkos.app.data.remote.dto.GetIncidentReportsRequest
-import com.parkos.app.domain.model.IncidentReport
-
-
 
 @Singleton
 class ParkingRepositoryImpl @Inject constructor(
-    private val apiService: ApiService
+    private val apiService: ApiService,
+    private val offlineCacheDao: OfflineCacheDao,
+    private val gson: Gson,
+    private val offlineModeManager: OfflineModeManager
 ) : ParkingRepository {
 
     override suspend fun getParkingLots(
         role: String,
         orgId: String?
     ): Result<List<ParkingLot>> {
+        val cacheKey = parkingLotsCacheKey(role, orgId)
+
         return try {
             expireOldReservations()
 
@@ -57,6 +65,17 @@ class ParkingRepositoryImpl @Inject constructor(
             }
 
             if (!response.isSuccessful) {
+                if (shouldUseCacheForHttpCode(response.code())) {
+                    val cachedResult = offlineCacheResult<ParkingLot>(
+                        cacheKey = cacheKey,
+                        fallbackMessage = "No hay conexión y no hay estacionamientos guardados."
+                    )
+
+                    if (cachedResult.isSuccess) {
+                        return cachedResult
+                    }
+                }
+
                 return Result.failure(
                     Exception("No se pudieron cargar los estacionamientos: ${response.errorBody()?.string()}")
                 )
@@ -83,155 +102,24 @@ class ParkingRepositoryImpl @Inject constructor(
                 )
             }
 
+            saveOfflineCache(cacheKey, lotsWithAvailability)
+            offlineModeManager.setOfflineMode(false)
+
             Result.success(lotsWithAvailability)
 
         } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-    override suspend fun adminMoveLayoutElement(
-        elementId: String,
-        targetFloorId: String,
-        targetRowIndex: Int,
-        targetColIndex: Int
-    ): Result<ParkingLayoutElement> {
-        return try {
-            val response = apiService.adminMoveLayoutElement(
-                AdminMoveLayoutElementRequest(
-                    elementId = elementId,
-                    targetFloorId = targetFloorId,
-                    targetRowIndex = targetRowIndex,
-                    targetColIndex = targetColIndex
-                )
+            offlineCacheResult(
+                cacheKey = cacheKey,
+                fallbackMessage = "No hay conexión y no hay estacionamientos guardados."
             )
-
-            if (!response.isSuccessful) {
-                return Result.failure(
-                    Exception("No se pudo mover el elemento del plano: ${response.errorBody()?.string()}")
-                )
-            }
-
-            val movedElement = response.body()
-                ?: return Result.failure(Exception("Supabase no devolvió el elemento movido."))
-
-            Result.success(movedElement.toDomain())
-
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    override suspend fun updateMyFullName(
-        fullName: String
-    ): Result<String> {
-        return try {
-            val response = apiService.updateMyFullName(
-                UpdateFullNameRequest(
-                    fullName = fullName.trim()
-                )
-            )
-
-            if (!response.isSuccessful) {
-                return Result.failure(
-                    Exception("No se pudo actualizar tu nombre.")
-                )
-            }
-
-            val updatedUser = response.body()
-                ?: return Result.failure(Exception("Supabase no devolvió el usuario actualizado."))
-
-            Result.success(updatedUser.fullName)
-
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-    override suspend fun getMyReservationHistory(
-        limit: Int
-    ): Result<List<ReservationHistoryItem>> {
-        return try {
-            val response = apiService.getMyReservationHistory(
-                GetReservationHistoryRequest(
-                    limit = limit
-                )
-            )
-
-            if (!response.isSuccessful) {
-                return Result.failure(
-                    Exception(
-                        friendlyParkingError(
-                            rawError = response.errorBody()?.string(),
-                            fallback = "No se pudo cargar tu historial."
-                        )
-                    )
-                )
-            }
-
-            val history = response.body()
-                ?.map { it.toDomain() }
-                ?: emptyList()
-
-            Result.success(history)
-
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    override suspend fun adminDeleteParkingSpot(
-        spotId: String
-    ): Result<ParkingSpot> {
-        return try {
-            val response = apiService.adminDeleteParkingSpot(
-                AdminDeleteParkingSpotRequest(
-                    spotId = spotId
-                )
-            )
-
-            if (!response.isSuccessful) {
-                return Result.failure(
-                    Exception("No se pudo eliminar el cajón: ${response.errorBody()?.string()}")
-                )
-            }
-
-            val deletedSpot = response.body()
-                ?: return Result.failure(Exception("Supabase no devolvió el cajón eliminado."))
-
-            Result.success(deletedSpot.toDomain())
-
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    override suspend fun getParkingLayoutElements(
-        parkingLotId: String
-    ): Result<List<ParkingLayoutElement>> {
-        return try {
-            val response = apiService.getParkingLayoutElements(
-                parkingLotIdFilter = "eq.$parkingLotId"
-            )
-
-            if (!response.isSuccessful) {
-                return Result.failure(
-                    Exception("No se pudo cargar el layout del estacionamiento: ${response.errorBody()?.string()}")
-                )
-            }
-
-            val layoutElements = response.body()
-                ?.map { it.toDomain() }
-                ?: emptyList()
-
-            Result.success(layoutElements)
-
-        } catch (e: Exception) {
-            Result.failure(e)
         }
     }
 
     override suspend fun getParkingSpots(
         parkingLotId: String
     ): Result<List<ParkingSpot>> {
+        val cacheKey = parkingSpotsCacheKey(parkingLotId)
+
         return try {
             expireOldReservations()
 
@@ -240,6 +128,17 @@ class ParkingRepositoryImpl @Inject constructor(
             )
 
             if (!response.isSuccessful) {
+                if (shouldUseCacheForHttpCode(response.code())) {
+                    val cachedResult = offlineCacheResult<ParkingSpot>(
+                        cacheKey = cacheKey,
+                        fallbackMessage = "No hay conexión y no hay cajones guardados para este estacionamiento."
+                    )
+
+                    if (cachedResult.isSuccess) {
+                        return cachedResult
+                    }
+                }
+
                 return Result.failure(
                     Exception("No se pudieron cargar los cajones: ${response.errorBody()?.string()}")
                 )
@@ -249,10 +148,104 @@ class ParkingRepositoryImpl @Inject constructor(
                 ?.map { it.toDomain() }
                 ?: emptyList()
 
+            saveOfflineCache(cacheKey, spots)
+            offlineModeManager.setOfflineMode(false)
+
             Result.success(spots)
 
         } catch (e: Exception) {
-            Result.failure(e)
+            offlineCacheResult(
+                cacheKey = cacheKey,
+                fallbackMessage = "No hay conexión y no hay cajones guardados para este estacionamiento."
+            )
+        }
+    }
+
+    override suspend fun getParkingFloors(
+        parkingLotId: String
+    ): Result<List<ParkingFloor>> {
+        val cacheKey = parkingFloorsCacheKey(parkingLotId)
+
+        return try {
+            val response = apiService.getParkingFloors(
+                parkingLotIdFilter = "eq.$parkingLotId"
+            )
+
+            if (!response.isSuccessful) {
+                if (shouldUseCacheForHttpCode(response.code())) {
+                    val cachedResult = offlineCacheResult<ParkingFloor>(
+                        cacheKey = cacheKey,
+                        fallbackMessage = "No hay conexión y no hay pisos guardados para este estacionamiento."
+                    )
+
+                    if (cachedResult.isSuccess) {
+                        return cachedResult
+                    }
+                }
+
+                return Result.failure(
+                    Exception("No se pudieron cargar los pisos: ${response.errorBody()?.string()}")
+                )
+            }
+
+            val floors = response.body()
+                ?.map { it.toDomain() }
+                ?: emptyList()
+
+            saveOfflineCache(cacheKey, floors)
+            offlineModeManager.setOfflineMode(false)
+
+            Result.success(floors)
+
+        } catch (e: Exception) {
+            offlineCacheResult(
+                cacheKey = cacheKey,
+                fallbackMessage = "No hay conexión y no hay pisos guardados para este estacionamiento."
+            )
+        }
+    }
+
+    override suspend fun getParkingLayoutElements(
+        parkingLotId: String
+    ): Result<List<ParkingLayoutElement>> {
+        val cacheKey = parkingLayoutElementsCacheKey(parkingLotId)
+
+        return try {
+            val response = apiService.getParkingLayoutElements(
+                parkingLotIdFilter = "eq.$parkingLotId"
+            )
+
+            if (!response.isSuccessful) {
+                if (shouldUseCacheForHttpCode(response.code())) {
+                    val cachedResult = offlineCacheResult<ParkingLayoutElement>(
+                        cacheKey = cacheKey,
+                        fallbackMessage = "No hay conexión y no hay plano guardado para este estacionamiento."
+                    )
+
+                    if (cachedResult.isSuccess) {
+                        return cachedResult
+                    }
+                }
+
+                return Result.failure(
+                    Exception("No se pudo cargar el layout del estacionamiento: ${response.errorBody()?.string()}")
+                )
+            }
+
+            val layoutElements = response.body()
+                ?.map { it.toDomain() }
+                ?: emptyList()
+
+            saveOfflineCache(cacheKey, layoutElements)
+            offlineModeManager.setOfflineMode(false)
+
+            Result.success(layoutElements)
+
+        } catch (e: Exception) {
+            offlineCacheResult(
+                cacheKey = cacheKey,
+                fallbackMessage = "No hay conexión y no hay plano guardado para este estacionamiento."
+            )
         }
     }
 
@@ -341,6 +334,7 @@ class ParkingRepositoryImpl @Inject constructor(
             Result.failure(e)
         }
     }
+
     override suspend fun adminUpdateParkingSpot(
         spotId: String,
         status: String,
@@ -365,81 +359,6 @@ class ParkingRepositoryImpl @Inject constructor(
                 ?: return Result.failure(Exception("Supabase no devolvió el cajón actualizado."))
 
             Result.success(updatedSpot.toDomain())
-
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    override suspend fun expireOldReservations(): Result<Unit> {
-        return try {
-            apiService.expireOldReservations()
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    private fun ParkingLotDto.toDomain(
-        availableSpots: Int,
-        totalSpots: Int
-    ): ParkingLot {
-        return ParkingLot(
-            id = id,
-            orgId = orgId,
-            name = name,
-            address = address,
-            latitude = latitude,
-            longitude = longitude,
-            createdAt = createdAt,
-            availableSpots = availableSpots,
-            totalSpots = totalSpots
-        )
-    }
-
-    private fun ParkingSpotDto.toDomain(): ParkingSpot {
-        return ParkingSpot(
-            id = id,
-            parkingLotId = parkingLotId,
-            spotNumber = spotNumber,
-            status = status,
-            type = type,
-            updatedAt = updatedAt
-        )
-    }
-
-    private fun ReservationDto.toDomain(): Reservation {
-        return Reservation(
-            id = id,
-            userId = userId,
-            spotId = spotId,
-            status = status,
-            startTime = startTime,
-            endTime = endTime,
-            createdAt = createdAt,
-            expiresAt = expiresAt,
-            occupiedAt = occupiedAt
-        )
-    }
-    override suspend fun getParkingFloors(
-        parkingLotId: String
-    ): Result<List<ParkingFloor>> {
-        return try {
-            val response = apiService.getParkingFloors(
-                parkingLotIdFilter = "eq.$parkingLotId"
-            )
-
-            if (!response.isSuccessful) {
-                return Result.failure(
-                    Exception("No se pudieron cargar los pisos: ${response.errorBody()?.string()}")
-                )
-            }
-
-            val floors = response.body()
-                ?.map { it.toDomain() }
-                ?: emptyList()
-
-            Result.success(floors)
 
         } catch (e: Exception) {
             Result.failure(e)
@@ -492,6 +411,33 @@ class ParkingRepositoryImpl @Inject constructor(
             Result.failure(e)
         }
     }
+
+    override suspend fun adminDeleteParkingSpot(
+        spotId: String
+    ): Result<ParkingSpot> {
+        return try {
+            val response = apiService.adminDeleteParkingSpot(
+                AdminDeleteParkingSpotRequest(
+                    spotId = spotId
+                )
+            )
+
+            if (!response.isSuccessful) {
+                return Result.failure(
+                    Exception("No se pudo eliminar el cajón: ${response.errorBody()?.string()}")
+                )
+            }
+
+            val deletedSpot = response.body()
+                ?: return Result.failure(Exception("Supabase no devolvió el cajón eliminado."))
+
+            Result.success(deletedSpot.toDomain())
+
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     override suspend fun adminCreateLayoutElement(
         parkingLotId: String,
         floorId: String,
@@ -555,121 +501,97 @@ class ParkingRepositoryImpl @Inject constructor(
             Result.failure(e)
         }
     }
-    private fun friendlyParkingError(
-        rawError: String?,
-        fallback: String
-    ): String {
-        val cleanMessage = extractRemoteMessage(rawError)
-        val searchableText = "${rawError.orEmpty()} ${cleanMessage.orEmpty()}".lowercase()
 
-        return when {
-            "duplicate" in searchableText ||
-                    "23505" in searchableText ||
-                    "unique" in searchableText ||
-                    "spot_number" in searchableText ||
-                    "ya existe" in searchableText ||
-                    "identificador" in searchableText -> {
-                "Ya existe un cajón con ese identificador. Usa otro, por ejemplo A-06."
+    override suspend fun adminMoveLayoutElement(
+        elementId: String,
+        targetFloorId: String,
+        targetRowIndex: Int,
+        targetColIndex: Int
+    ): Result<ParkingLayoutElement> {
+        return try {
+            val response = apiService.adminMoveLayoutElement(
+                AdminMoveLayoutElementRequest(
+                    elementId = elementId,
+                    targetFloorId = targetFloorId,
+                    targetRowIndex = targetRowIndex,
+                    targetColIndex = targetColIndex
+                )
+            )
+
+            if (!response.isSuccessful) {
+                return Result.failure(
+                    Exception("No se pudo mover el elemento del plano: ${response.errorBody()?.string()}")
+                )
             }
 
-            "celda" in searchableText && "ocupada" in searchableText -> {
-                "Esa celda ya está ocupada. Selecciona otra posición en el plano."
-            }
+            val movedElement = response.body()
+                ?: return Result.failure(Exception("Supabase no devolvió el elemento movido."))
 
-            "fila" in searchableText && "rango" in searchableText -> {
-                "La fila seleccionada está fuera del rango permitido."
-            }
+            Result.success(movedElement.toDomain())
 
-            "columna" in searchableText && "rango" in searchableText -> {
-                "La columna seleccionada está fuera del rango permitido."
-            }
-
-            "solo administradores" in searchableText -> {
-                "Solo los administradores pueden realizar esta acción."
-            }
-
-            !cleanMessage.isNullOrBlank() -> {
-                cleanMessage
-            }
-
-            else -> {
-                fallback
-            }
-        }
-    }
-    private fun friendlyIncidentReportError(
-        rawError: String?,
-        fallback: String
-    ): String {
-        val cleanMessage = extractRemoteMessage(rawError)
-        val searchableText = "${rawError.orEmpty()} ${cleanMessage.orEmpty()}".lowercase()
-
-        return when {
-            "casilla indicada no existe" in searchableText ||
-                    "no existe en este estacionamiento" in searchableText -> {
-                "La casilla indicada no existe en este estacionamiento. Revisa el identificador, por ejemplo A-03."
-            }
-
-            "placa debe tener" in searchableText -> {
-                "La placa debe tener al menos 3 caracteres."
-            }
-
-            "placa es demasiado larga" in searchableText -> {
-                "La placa es demasiado larga."
-            }
-
-            "tipo de incidente inválido" in searchableText -> {
-                "Selecciona un tipo de incidente válido."
-            }
-
-            "describe el tipo de incidente" in searchableText -> {
-                "Describe el incidente cuando selecciones Otro."
-            }
-
-            "detalles son demasiado largos" in searchableText -> {
-                "Los detalles son demasiado largos. Intenta resumir el reporte."
-            }
-
-            "solo personal staff" in searchableText -> {
-                "Solo personal staff aprobado puede crear reportes."
-            }
-
-            "acceso staff" in searchableText && "aprobado" in searchableText -> {
-                "Tu acceso staff aún no está aprobado."
-            }
-
-            "estacionamiento no pertenece" in searchableText -> {
-                "No puedes crear reportes para este estacionamiento."
-            }
-
-            !cleanMessage.isNullOrBlank() -> {
-                cleanMessage
-            }
-
-            else -> {
-                fallback
-            }
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 
-    private fun extractRemoteMessage(rawError: String?): String? {
-        if (rawError.isNullOrBlank()) {
-            return null
+    override suspend fun getMyReservationHistory(
+        limit: Int
+    ): Result<List<ReservationHistoryItem>> {
+        return try {
+            val response = apiService.getMyReservationHistory(
+                GetReservationHistoryRequest(
+                    limit = limit
+                )
+            )
+
+            if (!response.isSuccessful) {
+                return Result.failure(
+                    Exception(
+                        friendlyParkingError(
+                            rawError = response.errorBody()?.string(),
+                            fallback = "No se pudo cargar tu historial."
+                        )
+                    )
+                )
+            }
+
+            val history = response.body()
+                ?.map { it.toDomain() }
+                ?: emptyList()
+
+            Result.success(history)
+
+        } catch (e: Exception) {
+            Result.failure(e)
         }
-
-        val messageRegex = Regex(
-            pattern = "\"(?:message|msg|details|hint)\"\\s*:\\s*\"([^\"]+)\"",
-            option = RegexOption.IGNORE_CASE
-        )
-
-        return messageRegex
-            .find(rawError)
-            ?.groupValues
-            ?.getOrNull(1)
-            ?.replace("\\n", " ")
-            ?.replace("\\\"", "\"")
-            ?.trim()
     }
+
+    override suspend fun updateMyFullName(
+        fullName: String
+    ): Result<String> {
+        return try {
+            val response = apiService.updateMyFullName(
+                UpdateFullNameRequest(
+                    fullName = fullName.trim()
+                )
+            )
+
+            if (!response.isSuccessful) {
+                return Result.failure(
+                    Exception("No se pudo actualizar tu nombre.")
+                )
+            }
+
+            val updatedUser = response.body()
+                ?: return Result.failure(Exception("Supabase no devolvió el usuario actualizado."))
+
+            Result.success(updatedUser.fullName)
+
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     override suspend fun adminGetPendingStaffRequests(): Result<List<StaffRequest>> {
         return try {
             val response = apiService.adminGetPendingStaffRequests()
@@ -725,6 +647,7 @@ class ParkingRepositoryImpl @Inject constructor(
             Result.failure(e)
         }
     }
+
     override suspend fun adminGetOrgStaffMembers(): Result<List<StaffMember>> {
         return try {
             val response = apiService.adminGetOrgStaffMembers()
@@ -778,6 +701,7 @@ class ParkingRepositoryImpl @Inject constructor(
             Result.failure(e)
         }
     }
+
     override suspend fun staffCreateIncidentReport(
         parkingLotId: String,
         spotNumber: String?,
@@ -851,4 +775,242 @@ class ParkingRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun expireOldReservations(): Result<Unit> {
+        return try {
+            apiService.expireOldReservations()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private fun ParkingLotDto.toDomain(
+        availableSpots: Int,
+        totalSpots: Int
+    ): ParkingLot {
+        return ParkingLot(
+            id = id,
+            orgId = orgId,
+            name = name,
+            address = address,
+            latitude = latitude,
+            longitude = longitude,
+            createdAt = createdAt,
+            availableSpots = availableSpots,
+            totalSpots = totalSpots
+        )
+    }
+
+    private fun ParkingSpotDto.toDomain(): ParkingSpot {
+        return ParkingSpot(
+            id = id,
+            parkingLotId = parkingLotId,
+            spotNumber = spotNumber,
+            status = status,
+            type = type,
+            updatedAt = updatedAt
+        )
+    }
+
+    private fun ReservationDto.toDomain(): Reservation {
+        return Reservation(
+            id = id,
+            userId = userId,
+            spotId = spotId,
+            status = status,
+            startTime = startTime,
+            endTime = endTime,
+            createdAt = createdAt,
+            expiresAt = expiresAt,
+            occupiedAt = occupiedAt
+        )
+    }
+
+    private fun parkingLotsCacheKey(
+        role: String,
+        orgId: String?
+    ): String {
+        return "parking_lots:${role}:${orgId.orEmpty()}"
+    }
+
+    private fun parkingSpotsCacheKey(
+        parkingLotId: String
+    ): String {
+        return "parking_spots:$parkingLotId"
+    }
+
+    private fun parkingFloorsCacheKey(
+        parkingLotId: String
+    ): String {
+        return "parking_floors:$parkingLotId"
+    }
+
+    private fun parkingLayoutElementsCacheKey(
+        parkingLotId: String
+    ): String {
+        return "parking_layout_elements:$parkingLotId"
+    }
+
+    private suspend fun saveOfflineCache(
+        cacheKey: String,
+        value: Any
+    ) {
+        offlineCacheDao.upsertCache(
+            OfflineCacheEntity(
+                cacheKey = cacheKey,
+                json = gson.toJson(value),
+                cachedAt = System.currentTimeMillis()
+            )
+        )
+    }
+
+    private suspend inline fun <reified T> getOfflineCachedList(
+        cacheKey: String
+    ): List<T>? {
+        val cache = offlineCacheDao.getCache(cacheKey) ?: return null
+
+        return try {
+            val type = object : TypeToken<List<T>>() {}.type
+            gson.fromJson<List<T>>(cache.json, type)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private suspend inline fun <reified T> offlineCacheResult(
+        cacheKey: String,
+        fallbackMessage: String
+    ): Result<List<T>> {
+        val cached = getOfflineCachedList<T>(cacheKey)
+
+        return if (cached != null) {
+            offlineModeManager.setOfflineMode(true)
+            Result.success(cached)
+        } else {
+            Result.failure(Exception(fallbackMessage))
+        }
+    }
+
+    private fun shouldUseCacheForHttpCode(
+        code: Int
+    ): Boolean {
+        return code == 408 || code == 429 || code in 500..599
+    }
+
+    private fun friendlyParkingError(
+        rawError: String?,
+        fallback: String
+    ): String {
+        val cleanMessage = extractRemoteMessage(rawError)
+        val searchableText = "${rawError.orEmpty()} ${cleanMessage.orEmpty()}".lowercase()
+
+        return when {
+            "duplicate" in searchableText ||
+                    "23505" in searchableText ||
+                    "unique" in searchableText ||
+                    "spot_number" in searchableText ||
+                    "ya existe" in searchableText ||
+                    "identificador" in searchableText -> {
+                "Ya existe un cajón con ese identificador. Usa otro, por ejemplo A-06."
+            }
+
+            "celda" in searchableText && "ocupada" in searchableText -> {
+                "Esa celda ya está ocupada. Selecciona otra posición en el plano."
+            }
+
+            "fila" in searchableText && "rango" in searchableText -> {
+                "La fila seleccionada está fuera del rango permitido."
+            }
+
+            "columna" in searchableText && "rango" in searchableText -> {
+                "La columna seleccionada está fuera del rango permitido."
+            }
+
+            "solo administradores" in searchableText -> {
+                "Solo los administradores pueden realizar esta acción."
+            }
+
+            !cleanMessage.isNullOrBlank() -> {
+                cleanMessage
+            }
+
+            else -> {
+                fallback
+            }
+        }
+    }
+
+    private fun friendlyIncidentReportError(
+        rawError: String?,
+        fallback: String
+    ): String {
+        val cleanMessage = extractRemoteMessage(rawError)
+        val searchableText = "${rawError.orEmpty()} ${cleanMessage.orEmpty()}".lowercase()
+
+        return when {
+            "casilla indicada no existe" in searchableText ||
+                    "no existe en este estacionamiento" in searchableText -> {
+                "La casilla indicada no existe en este estacionamiento. Revisa el identificador, por ejemplo A-03."
+            }
+
+            "placa debe tener" in searchableText -> {
+                "La placa debe tener al menos 3 caracteres."
+            }
+
+            "placa es demasiado larga" in searchableText -> {
+                "La placa es demasiado larga."
+            }
+
+            "tipo de incidente inválido" in searchableText -> {
+                "Selecciona un tipo de incidente válido."
+            }
+
+            "describe el tipo de incidente" in searchableText -> {
+                "Describe el incidente cuando selecciones Otro."
+            }
+
+            "detalles son demasiado largos" in searchableText -> {
+                "Los detalles son demasiado largos. Intenta resumir el reporte."
+            }
+
+            "solo personal staff" in searchableText -> {
+                "Solo personal staff aprobado puede crear reportes."
+            }
+
+            "acceso staff" in searchableText && "aprobado" in searchableText -> {
+                "Tu acceso staff aún no está aprobado."
+            }
+
+            "estacionamiento no pertenece" in searchableText -> {
+                "No puedes crear reportes para este estacionamiento."
+            }
+
+            !cleanMessage.isNullOrBlank() -> {
+                cleanMessage
+            }
+
+            else -> {
+                fallback
+            }
+        }
+    }
+
+    private fun extractRemoteMessage(rawError: String?): String? {
+        if (rawError.isNullOrBlank()) {
+            return null
+        }
+
+        val messageRegex = Regex(
+            pattern = "\"(?:message|msg|details|hint)\"\\s*:\\s*\"([^\"]+)\"",
+            option = RegexOption.IGNORE_CASE
+        )
+
+        return messageRegex
+            .find(rawError)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.replace("\\n", " ")
+            ?.replace("\\\"", "\"")
+            ?.trim()
+    }
 }

@@ -2,7 +2,9 @@ package com.parkos.app.di
 
 import android.content.Context
 import androidx.room.Room
+import com.google.gson.Gson
 import com.parkos.app.data.local.AppDatabase
+import com.parkos.app.data.local.dao.OfflineCacheDao
 import com.parkos.app.data.local.dao.UserDao
 import dagger.Module
 import dagger.Provides
@@ -28,5 +30,16 @@ object DatabaseModule {
         .build()
 
     @Provides
-    fun provideUserDao(db: AppDatabase): UserDao = db.userDao()
+    fun provideUserDao(
+        db: AppDatabase
+    ): UserDao = db.userDao()
+
+    @Provides
+    fun provideOfflineCacheDao(
+        db: AppDatabase
+    ): OfflineCacheDao = db.offlineCacheDao()
+
+    @Provides
+    @Singleton
+    fun provideGson(): Gson = Gson()
 }

@@ -19,11 +19,14 @@ import com.parkos.app.domain.model.ReservationHistoryItem
 import com.parkos.app.domain.model.StaffRequest
 import com.parkos.app.domain.model.StaffMember
 import com.parkos.app.domain.model.IncidentReport
+import com.parkos.app.core.OfflineModeManager
+
 
 @HiltViewModel
 class ParkingViewModel @Inject constructor(
     private val parkingRepository: ParkingRepository,
-    private val tokenManager: TokenManager
+    private val tokenManager: TokenManager,
+    private val offlineModeManager: OfflineModeManager
 ) : ViewModel() {
 
     private val _userRole = MutableStateFlow<String?>(null)
@@ -148,6 +151,9 @@ class ParkingViewModel @Inject constructor(
 
     private val _lastCreatedIncidentReport = MutableStateFlow<IncidentReport?>(null)
     val lastCreatedIncidentReport = _lastCreatedIncidentReport.asStateFlow()
+
+    val isOfflineMode = offlineModeManager.isOfflineMode
+
 
     fun loadDashboard() {
         viewModelScope.launch {
