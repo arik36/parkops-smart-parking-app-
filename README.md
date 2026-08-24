@@ -15,15 +15,19 @@ Built with Kotlin, Jetpack Compose and Clean Architecture over a Supabase (Postg
 (some of the functions in the interface)
 
 -parking view (universal module)
+
 <img width="290" height="568" alt="image" src="https://github.com/user-attachments/assets/a5ffae7d-99ac-4b64-ad6c-eef7537e056a" />
 
 -administrative notices (admin module)
+
 <img width="306" height="614" alt="image" src="https://github.com/user-attachments/assets/a74cef57-21fe-404e-90c5-4e3a98f8ea19" />
 
 -staff management module
+
 <img width="307" height="603" alt="image" src="https://github.com/user-attachments/assets/eda47e31-67fc-4934-804b-57fce6e7e2fa" />
 
 -history by client
+
 <img width="290" height="587" alt="image" src="https://github.com/user-attachments/assets/47a93550-451c-40d8-b782-fc00153a6e89" />
 
 ---
