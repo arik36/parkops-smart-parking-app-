@@ -1,1 +1,0 @@
-jijijijiji atte: los zombies
